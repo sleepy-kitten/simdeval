@@ -1,10 +1,50 @@
+use crate::error::SimdevalError;
+
 /// a `Token` type
 /// stores the token kind and the lenght of that token in the source code
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Token {
     kind: TokenKind,
     span: u16,
+}
+
+impl TryFrom<u8> for Token {
+    type Error = SimdevalError;
+    fn try_from(chr: u8) -> Result<Self, Self::Error> {
+        Ok(Token::new(match chr {
+            b'0'..=b'9' => TokenKind::Literal(Literal::Int),
+
+            b'a'..=b'z' | b'A'..=b'Z' => TokenKind::Identifier(Identifier::Variable),
+
+            b'+' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Add)),
+            b'-' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Sub)),
+            b'*' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Mul)),
+            b'/' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Div)),
+            b'%' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Mod)),
+            b'^' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Pow)),
+
+            b'=' => TokenKind::Operator(Operator::Logical(Logical::Equal)),
+            b'!' => TokenKind::Operator(Operator::Logical(Logical::Not)),
+            b'>' => TokenKind::Operator(Operator::Logical(Logical::Greater)),
+            b'<' => TokenKind::Operator(Operator::Logical(Logical::Less)),
+            b'&' => TokenKind::Operator(Operator::Logical(Logical::And)),
+            b'|' => TokenKind::Operator(Operator::Logical(Logical::Or)),
+            b'#' => TokenKind::Operator(Operator::Logical(Logical::Xor)),
+
+            b'(' => TokenKind::Separator(Separator::Bracket(Bracket::Opened)),
+            b')' => TokenKind::Separator(Separator::Bracket(Bracket::Closed)),
+            b'{' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
+            b'}' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
+            b'[' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
+            b']' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
+
+            b'.' => TokenKind::Literal(Literal::Float),
+            b',' => TokenKind::Separator(Separator::Comma),
+
+            _ => return Err(SimdevalError::UnkownCharacter),
+        }))
+    }
 }
 
 impl Token {
@@ -13,7 +53,7 @@ impl Token {
         self.span
     }
     /// constructs a new token
-    pub(crate) fn new(kind: TokenKind) -> Self {
+    pub(crate) const fn new(kind: TokenKind) -> Self {
         Self { kind, span: 1 }
     }
 
@@ -33,7 +73,7 @@ impl Token {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum TokenKind {
     Literal(Literal),
     Operator(Operator),
@@ -41,40 +81,39 @@ pub(crate) enum TokenKind {
     Separator(Separator),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Literal {
     String,
     Int,
     Float,
 }
 
-impl Literal {
-}
-#[derive(Debug)]
+impl Literal {}
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Separator {
     Comma,
     WavyBracket(Bracket),
     Bracket(Bracket),
     SquareBracket(Bracket),
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Bracket {
     Opened,
     Closed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Identifier {
     Function,
     Variable,
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Operator {
     Arithmetic(Arithmetic),
     Logical(Logical),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Arithmetic {
     Add,
     Sub,
@@ -83,7 +122,7 @@ pub(crate) enum Arithmetic {
     Mod,
     Pow,
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Logical {
     And,
     Or,
