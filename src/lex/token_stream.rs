@@ -6,38 +6,45 @@ use super::token::{
     Arithmetic, Bracket, Identifier, Literal, Logical, Operator, Separator, Token, TokenKind,
 };
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct TokenStream {
-    stream: Vec<Token>,
+pub(crate) struct TokenStream<'a> {
+    pub tokens: Vec<Token>,
+    source: &'a str,
 }
-impl FromIterator<Token> for TokenStream {
-    fn from_iter<T: IntoIterator<Item = Token>>(iter: T) -> Self {
-        Self {
-            stream: FromIterator::from_iter(iter),
-        }
+impl<'a> TokenStream<'a> {
+    pub(crate) fn len(&self) -> usize {
+        self.tokens.len()
     }
-}
-
-impl FromStr for TokenStream {
-    type Err = SimdevalError;
-    fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let mut token_stream = TokenStream::with_capacity(string.len());
-        for &chr in string.as_bytes() {
+    pub(crate) fn from_string(source: &'a str) -> Result<Self, SimdevalError> {
+        let mut token_stream = TokenStream::with_capacity(source.len(), source);
+        for &chr in source.as_bytes() {
             token_stream.push(chr)?
         }
+        token_stream.shrink_to_fit();
         Ok(token_stream)
     }
-}
-
-impl TokenStream {
-    pub fn with_capacity(capacity: usize) -> Self {
+    fn get_char(&self, index: usize) -> Option<u8> {
+        self.source.as_bytes().get(index).copied()
+    }
+    fn with_capacity(capacity: usize, source: &'a str) -> Self {
         Self {
-            stream: Vec::with_capacity(capacity),
+            tokens: Vec::with_capacity(capacity),
+            source,
         }
     }
-    pub fn push(&mut self, chr: u8) -> Result<(), SimdevalError> {
-        let token = self.stream.last_mut();
+    fn shrink_to_fit(&mut self) {
+        self.tokens.shrink_to_fit()
+    }
+    fn push(&mut self, chr: u8) -> Result<(), SimdevalError> {
+        let token = self.tokens.last_mut();
         if let Some(token) = token {
             match chr {
+                b' ' => self.new_space(),
+                b':' => match token.kind() {
+                    TokenKind::Identifier(_) => {
+                        token.push(TokenKind::Namespace)
+                    }
+                    _ => self.new_token(chr)?
+                },
                 b'0'..=b'9' => match token.kind() {
                     TokenKind::Identifier(_) => token.inc_span(),
                     TokenKind::Literal(_) => token.inc_span(),
@@ -50,12 +57,10 @@ impl TokenStream {
                     _ => self.new_token(chr)?,
                 },
 
-                b'.' | b',' | b'_' | b' ' | b'"' => match (chr, token.kind()) {
-                    (_, TokenKind::Literal(Literal::String)) => token.inc_span(),
+                b'.' | b',' | b'_' | b'\'' => match (chr, token.kind()) {
                     (b'.', TokenKind::Literal(Literal::Int)) => {
                         token.push(TokenKind::Literal(Literal::Float))
                     }
-                    (b' ', _) => (),
                     _ => self.new_token(chr)?,
                 },
 
@@ -72,12 +77,22 @@ impl TokenStream {
                     }
                     _ => self.new_token(chr)?,
                 },
-                _ => (),
+                b'(' | b')' => match (chr, token.kind()) {
+                    (b'(', TokenKind::Identifier(_)) => {
+                        token.set_kind(TokenKind::Identifier(Identifier::Function));
+                        self.new_token(chr)?;
+                    }
+                    _ => self.new_token(chr)?,
+                },
+                _ => return Err(SimdevalError::UnexpectedToken),
             }
         } else {
             self.new_token(chr)?;
         }
         Ok(())
+    }
+    fn new_space(&mut self) {
+        self.tokens.push(Token::new(TokenKind::Space));
     }
     fn new_token(&mut self, chr: u8) -> Result<(), SimdevalError> {
         let token = Token::new(match chr {
@@ -109,24 +124,16 @@ impl TokenStream {
 
             b'.' => TokenKind::Literal(Literal::Float),
             b',' => TokenKind::Separator(Separator::Comma),
-
-            _ => return Err(SimdevalError::UnkownCharacter),
+            //b'\'' => TokenKind::Literal(Literal::String),
+            //b'"' => TokenKind::Literal(Literal::String),
+            _ => return Err(SimdevalError::UnkownCharacter(chr as char)),
         });
-        self.stream.push(token);
+        self.tokens.push(token);
         Ok(())
     }
-}
 
-/*
-fn try_from(chr: u8) -> Result<Self, Self::Error> {
-        Ok(match chr {
-            b'0'..=b'9' => PartialToken::Digit(chr),
-            b'a'..=b'z' | b'A'..=b'Z' => PartialToken::Letter(chr),
-            b'.' | b',' | b'_' | b' ' | b'"' => PartialToken::Delimiter(chr),
-            b'{' | b'}' | b'(' | b')' | b'[' | b']' => PartialToken::Bracket(chr),
-            b'+' | b'-' | b'*' | b'/' | b'%' | b'^' => PartialToken::Operator(chr),
-            b'&' | b'|' | b'!' | b'=' | b'<' | b'>' | b'#' => PartialToken::Operator(chr),
-            _ => return Err(SimdevalError::UnkownCharacter)
-        })
+    /// Get a reference to the token stream's tokens.
+    pub(crate) fn tokens(&self) -> &[Token] {
+        self.tokens.as_ref()
     }
-*/
+}

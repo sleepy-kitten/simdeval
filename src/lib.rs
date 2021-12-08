@@ -1,6 +1,7 @@
-#![allow(dead_code)]
+//#![allow(dead_code)]
 #![feature(test)]
-mod parser;
+mod lex;
 mod error;
+mod parse;
 
 mod tests;

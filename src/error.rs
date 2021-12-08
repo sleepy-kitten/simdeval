@@ -1,6 +1,6 @@
 #[derive(Debug)]
-pub(crate) enum SimdevalError {
-    UnkownCharacter,
+pub enum SimdevalError {
+    UnkownCharacter(char),
     UnexpectedToken,
-    Error,
+    NoIdentifierMatch,
 }
