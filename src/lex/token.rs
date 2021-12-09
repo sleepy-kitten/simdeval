@@ -1,4 +1,4 @@
-use std::{ops::Range, str::FromStr};
+use std::slice::Iter;
 
 use crate::{
     error::SimdevalError,
@@ -15,23 +15,36 @@ pub(crate) struct Token {
 }
 
 impl Token {
-    pub(crate) fn parse<T>(&self, start: usize, s: &str) -> Result<Node<T>, SimdevalError>
+    pub(crate) fn to_node<T>(
+        &self,
+        namespaces: &mut Iter<&str>,
+        slice: &str,
+    ) -> Result<Node<T>, SimdevalError>
     where
-        T: Function<T> + FromStr,
+        T: Function<T>,
     {
         Ok(match self.kind {
-            TokenKind::Operator(o) => Node::operator(o, 0, 0),
+            TokenKind::Operator(o) => Node::operator(o, None, None),
             TokenKind::Literal(l) => {
-                let string = std::str::from_utf8(&s.as_bytes()[start..self.span]).unwrap();
-                let value;
-                match l {
-                    Literal::Float => value = Value::Float(string.parse::<f64>()?),
-                    Literal::Int => value = Value::Int(string.parse::<u64>()?),
-                    Literal::String => value = Value::String(string.to_owned()),
+                let value = match l {
+                    Literal::Float => Value::Float(slice.parse::<f64>()?),
+                    Literal::Int => Value::Int(slice.parse::<u64>()?),
+                    Literal::String => Value::String(slice.to_owned()),
+                };
+                Node::Literal(value)
+            }
+            TokenKind::Identifier(i) => {
+                match i {
+                    Identifier::Function => {
+                        let function: T = <T as Function<T>>::parse(namespaces, slice)?;
+                        Node::function(function, None)
+                    },
+                    Identifier::Variable => Node::variable(slice.to_owned(), None),
                 }
-                Node::Literal(l)
-            } 
-        }); 
+            }
+            TokenKind::Space => return Err(SimdevalError::UnexpectedToken),
+            _ => return Err(SimdevalError::UnexpectedToken),
+        })
     }
 }
 /*
@@ -132,8 +145,8 @@ pub(crate) enum Separator {
 }
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Bracket {
-    Opened,
-    Closed,
+    Opened = 100,
+    Closed = -100,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

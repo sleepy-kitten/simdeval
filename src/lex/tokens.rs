@@ -14,18 +14,32 @@ pub(crate) struct Tokens<'a> {
     source: &'a str,
 }
 impl<'a> Tokens<'a> {
-    pub(crate) fn try_to_nodes<T>(&mut self) -> Result<Nodes<T>, SimdevalError>
+    pub(crate) fn try_to_nodes<T>(&self) -> Result<Nodes<T>, SimdevalError>
     where
-        T: Function<T> + FromStr,
+        T: Function<T>,
     {
-        let mut last_token_end = 0;
+        let mut offset = 0;
         let mut nodes = Nodes::with_capacity(self.len());
+        let mut namespaces = Vec::with_capacity(2);
+
         for token in self.tokens.iter() {
-            let node = token.parse::<T>(last_token_end, self.source)?;
-            nodes.push(node);
-            last_token_end += token.span();
+            let slice = self.slice_span(offset, token.span());
+            match token.kind() {
+                TokenKind::Namespace => namespaces.push(slice),
+                TokenKind::Separator(_) => (),
+                TokenKind::Space => (),
+                _ => {
+                    let node = token.to_node::<T>(&mut namespaces.iter(), slice)?;
+                    nodes.push(node);
+                    offset += token.span();
+                    namespaces.clear();
+                }
+            }
         }
         Ok(nodes)
+    }
+    fn slice_span(&self, offset: usize, span: usize) -> &str {
+        &self.source[offset..offset + span]
     }
     pub(crate) fn iter(&self) -> Iter<Token> {
         self.tokens.iter()

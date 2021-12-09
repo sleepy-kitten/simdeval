@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, str::FromStr};
+use std::{num::NonZeroUsize, slice::Iter, str::FromStr};
 
 use crate::{
     error::SimdevalError,
@@ -12,7 +12,6 @@ use crate::{
 pub(crate) trait Function<T>
 where
     T: Function<T>,
-    T: FromStr,
 {
     /// prefix for faster parsing of function identifiers
     const NAMESPACE: &'static str;
@@ -24,28 +23,38 @@ where
     fn is_const(&self) -> bool {
         true
     }
+    fn parse(namespaces: &mut Iter<&str>, identifier: &str) -> Result<T, SimdevalError>;
 }
+#[derive(Debug)]
 pub(crate) enum Node<T>
 where
     T: Function<T>,
-    T: FromStr,
 {
     Instruction {
         operator: Operator,
-        lhs: usize,
-        rhs: usize,
+        lhs: Option<usize>,
+        rhs: Option<usize>,
     },
     Literal(Value),
-    Variable(Variable),
+    Variable {
+        identifier: String,
+        index: Option<usize>,
+    },
     // not sure if this will never be 0 but it should not be, since the arguments can not come before the function
     Function {
         function: T,
-        args: Option<NonZeroUsize>,
+        args: Option<usize>,
     },
 }
-impl<T: Function<T> + FromStr> Node<T> {
-    pub(crate) fn operator(operator: Operator, lhs: usize, rhs: usize) -> Self {
+impl<T: Function<T>> Node<T> {
+    pub(crate) fn operator(operator: Operator, lhs: Option<usize>, rhs: Option<usize>) -> Self {
         Self::Instruction { operator, lhs, rhs }
+    }
+    pub(crate) fn variable(identifier: String, index: Option<usize>) -> Self {
+        Self::Variable { identifier, index }
+    }
+    pub(crate) fn function(function: T, args: Option<usize>) -> Self {
+        Self::Function { function, args }
     }
 }
 
@@ -55,6 +64,7 @@ impl<T: Function<T> + FromStr> TryFrom<Token> for Node<T> {
         todo!()
     }
 }
+#[derive(Debug)]
 pub(crate) enum Value {
     Int(u64),
     Float(f64),
@@ -65,7 +75,7 @@ pub(crate) struct Variable {
     identifier: String,
     index: usize,
 }
-
+#[derive(Debug)]
 pub enum Std {
     NaturalLog,
     SquareRoot,
@@ -78,15 +88,17 @@ impl Function<Std> for Std {
             Self::SquareRoot => Value::Float(2.14),
         }
     }
-}
-impl FromStr for Std {
-    type Err = SimdevalError;
-    fn from_str(identifier: &str) -> Result<Self, Self::Err> {
-        Ok(match identifier {
-            "log" => Self::NaturalLog,
-            "sqrt" => Self::SquareRoot,
-            _ => return Err(Self::Err::NoIdentifierMatch),
-        })
+    fn parse(namespaces: &mut Iter<&str>, identifier: &str) -> Result<Std, SimdevalError> {
+        if let Some(next) = namespaces.next() {
+            let slice = &next[0..next.len()-1];
+            <Std as Function<Std>>::parse(namespaces, identifier)
+        } else {
+            Ok(match identifier {
+                "log" => Self::NaturalLog,
+                "sqrt" => Self::SquareRoot,
+                _ => return Err(SimdevalError::NoIdentifierMatch),
+            })
+        }
     }
 }
 fn test_2() {

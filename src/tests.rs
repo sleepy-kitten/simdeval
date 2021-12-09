@@ -3,7 +3,7 @@ extern crate test;
 
 use fasteval::{Expression, Parser, Slab};
 
-use crate::lex::tokens::Tokens;
+use crate::{lex::tokens::Tokens, parse::node::Std};
 
 #[test]
 fn test_tokenizing_fast() {
@@ -30,4 +30,13 @@ fn bench_fasteval(b: &mut test::Bencher) {
         let parser = Parser::new();
         parser.parse(expression, &mut slab.ps)
     }))
+}
+
+#[test]
+fn test_node_creation() {
+    let expression = "sqrt(m*x+b)";
+    let tokens = Tokens::from_string(expression).unwrap();
+    println!("tokens: {:#?}", tokens);
+    let nodes = tokens.try_to_nodes::<Std>().unwrap();
+    println!("nodes: {:#?}", nodes);
 }
