@@ -3,18 +3,18 @@ extern crate test;
 
 use fasteval::{Expression, Parser, Slab};
 
-use crate::lex::token_stream::TokenStream;
+use crate::lex::tokens::Tokens;
 
 #[test]
 fn test_tokenizing_fast() {
     let expression = "std:sqrt(2)";
-    let stream_fast = TokenStream::from_string(expression).unwrap();
-    let sum: u16 = stream_fast.tokens().iter().map(|t| t.span()).sum();
+    let stream_fast = Tokens::from_string(expression).unwrap();
+    let sum: usize = stream_fast.tokens().iter().map(|t| t.span()).sum();
     assert_eq!(expression.len(), sum as usize);
     println!("stream_fast: {:#?}", stream_fast);
 }
 fn tokenize_fast(expression: &str) {
-    TokenStream::from_string(expression).unwrap();
+    Tokens::from_string(expression).unwrap();
 }
 #[bench]
 fn bench_tokenizing_fast(b: &mut test::Bencher) {

@@ -1,6 +1,12 @@
-use std::str::FromStr;
+use std::{num::NonZeroUsize, str::FromStr};
 
-use crate::{error::SimdevalError, lex::token_stream::TokenStream};
+use crate::{
+    error::SimdevalError,
+    lex::{
+        token::{Operator, Token},
+        tokens::Tokens,
+    },
+};
 
 /// a function trait, intended to be used with enums where each variant represents a function
 pub(crate) trait Function<T>
@@ -11,9 +17,10 @@ where
     /// prefix for faster parsing of function identifiers
     const NAMESPACE: &'static str;
     /// calls a function out of the possible functions of `T`
-    fn call(&self, node: &[Node<T>]) -> Literal;
+    fn call(&self, node: &[Node<T>]) -> Value;
     /// whether a function returns the same solution each time it is called
     /// `true` by default so it can be evaluated during compilation
+    /// if set to `true` even though the function is not constant the expression might not behave as expected
     fn is_const(&self) -> bool {
         true
     }
@@ -23,22 +30,32 @@ where
     T: Function<T>,
     T: FromStr,
 {
-    Operator(Operator, Box<Node<T>>, Box<Node<T>>),
-    Literal(Literal),
+    Instruction {
+        operator: Operator,
+        lhs: usize,
+        rhs: usize,
+    },
+    Literal(Value),
     Variable(Variable),
-    Function(T, Vec<Node<T>>),
+    // not sure if this will never be 0 but it should not be, since the arguments can not come before the function
+    Function {
+        function: T,
+        args: Option<NonZeroUsize>,
+    },
+}
+impl<T: Function<T> + FromStr> Node<T> {
+    pub(crate) fn operator(operator: Operator, lhs: usize, rhs: usize) -> Self {
+        Self::Instruction { operator, lhs, rhs }
+    }
 }
 
-pub(crate) enum Operator {
-    Add = 1,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Pow,
-    Log,
+impl<T: Function<T> + FromStr> TryFrom<Token> for Node<T> {
+    type Error = SimdevalError;
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        todo!()
+    }
 }
-pub(crate) enum Literal {
+pub(crate) enum Value {
     Int(u64),
     Float(f64),
     Bool(bool),
@@ -55,10 +72,10 @@ pub enum Std {
 }
 impl Function<Std> for Std {
     const NAMESPACE: &'static str = "std";
-    fn call(&self, _: &[Node<Std>]) -> Literal {
+    fn call(&self, _: &[Node<Std>]) -> Value {
         match self {
-            Self::NaturalLog => Literal::Int(313),
-            Self::SquareRoot => Literal::Float(2.14),
+            Self::NaturalLog => Value::Int(313),
+            Self::SquareRoot => Value::Float(2.14),
         }
     }
 }
@@ -73,10 +90,13 @@ impl FromStr for Std {
     }
 }
 fn test_2() {
-    let node = Node::<Std>::Function(Std::SquareRoot, Vec::new());
+    let node = Node::<Std>::Function {
+        function: Std::SquareRoot,
+        args: None,
+    };
 }
-fn test(mut stream: TokenStream) {
-    for i in 1..stream.len() - 1 {}
+fn test(mut tokens: Tokens) {
+    for i in 1..tokens.len() - 1 {}
 }
 // 1 * 4 + ( 6 ^ 3 ^ 2 + 4 )
 // 2 2 2 1 4 7 7 7 7 7 5 5 4

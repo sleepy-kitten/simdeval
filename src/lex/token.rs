@@ -1,4 +1,9 @@
-use crate::error::SimdevalError;
+use std::{ops::Range, str::FromStr};
+
+use crate::{
+    error::SimdevalError,
+    parse::node::{Function, Node, Value},
+};
 
 /// a `Token` type
 /// stores the token kind and the lenght of that token in the source code
@@ -6,7 +11,28 @@ use crate::error::SimdevalError;
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct Token {
     kind: TokenKind,
-    span: u16,
+    span: usize,
+}
+
+impl Token {
+    pub(crate) fn parse<T>(&self, start: usize, s: &str) -> Result<Node<T>, SimdevalError>
+    where
+        T: Function<T> + FromStr,
+    {
+        Ok(match self.kind {
+            TokenKind::Operator(o) => Node::operator(o, 0, 0),
+            TokenKind::Literal(l) => {
+                let string = std::str::from_utf8(&s.as_bytes()[start..self.span]).unwrap();
+                let value;
+                match l {
+                    Literal::Float => value = Value::Float(string.parse::<f64>()?),
+                    Literal::Int => value = Value::Int(string.parse::<u64>()?),
+                    Literal::String => value = Value::String(string.to_owned()),
+                }
+                Node::Literal(l)
+            } 
+        }); 
+    }
 }
 /*
 impl TryFrom<u8> for Token {
@@ -14,16 +40,16 @@ impl TryFrom<u8> for Token {
     fn try_from(chr: u8) -> Result<Self, Self::Error> {
         Ok(Token::new(match chr {
             b'0'..=b'9' => TokenKind::Literal(Literal::Int),
-            
+
             b'a'..=b'z' | b'A'..=b'Z' => TokenKind::Identifier(Identifier::Variable),
-            
+
             b'+' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Add)),
             b'-' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Sub)),
             b'*' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Mul)),
             b'/' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Div)),
             b'%' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Mod)),
             b'^' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Pow)),
-            
+
             b'=' => TokenKind::Operator(Operator::Logical(Logical::Equal)),
             b'!' => TokenKind::Operator(Operator::Logical(Logical::Not)),
             b'>' => TokenKind::Operator(Operator::Logical(Logical::Greater)),
@@ -31,17 +57,17 @@ impl TryFrom<u8> for Token {
             b'&' => TokenKind::Operator(Operator::Logical(Logical::And)),
             b'|' => TokenKind::Operator(Operator::Logical(Logical::Or)),
             b'#' => TokenKind::Operator(Operator::Logical(Logical::Xor)),
-            
+
             b'(' => TokenKind::Separator(Separator::Bracket(Bracket::Opened)),
             b')' => TokenKind::Separator(Separator::Bracket(Bracket::Closed)),
             b'{' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
             b'}' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
             b'[' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
             b']' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
-            
+
             b'.' => TokenKind::Literal(Literal::Float),
             b',' => TokenKind::Separator(Separator::Comma),
-            
+
             _ => return Err(SimdevalError::UnkownCharacter(chr as char)),
         }))
     }
@@ -50,7 +76,7 @@ impl TryFrom<u8> for Token {
 
 impl Token {
     /// Get the token's span.
-    pub(crate) fn span(&self) -> u16 {
+    pub(crate) fn span(&self) -> usize {
         self.span
     }
     /// constructs a new token
@@ -86,7 +112,7 @@ pub(crate) enum TokenKind {
     Identifier(Identifier),
     Separator(Separator),
     Namespace,
-    Space
+    Space,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -123,7 +149,7 @@ pub(crate) enum Operator {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Arithmetic {
-    Add,
+    Add = 11,
     Sub,
     Mul,
     Div,
@@ -132,11 +158,11 @@ pub(crate) enum Arithmetic {
 }
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Logical {
+    Not = 1,
+    Equal,
     And,
     Or,
     Xor,
-    Not,
-    Equal,
     NotEqual,
     Greater,
     GreaterEqual,

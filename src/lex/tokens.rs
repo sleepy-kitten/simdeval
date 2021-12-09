@@ -1,21 +1,40 @@
-use std::str::FromStr;
+use std::{slice::Iter, str::FromStr};
 
-use crate::error::SimdevalError;
+use crate::{
+    error::SimdevalError,
+    parse::{node::Function, nodes::Nodes},
+};
 
 use super::token::{
     Arithmetic, Bracket, Identifier, Literal, Logical, Operator, Separator, Token, TokenKind,
 };
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct TokenStream<'a> {
-    pub tokens: Vec<Token>,
+pub(crate) struct Tokens<'a> {
+    tokens: Vec<Token>,
     source: &'a str,
 }
-impl<'a> TokenStream<'a> {
+impl<'a> Tokens<'a> {
+    pub(crate) fn try_to_nodes<T>(&mut self) -> Result<Nodes<T>, SimdevalError>
+    where
+        T: Function<T> + FromStr,
+    {
+        let mut last_token_end = 0;
+        let mut nodes = Nodes::with_capacity(self.len());
+        for token in self.tokens.iter() {
+            let node = token.parse::<T>(last_token_end, self.source)?;
+            nodes.push(node);
+            last_token_end += token.span();
+        }
+        Ok(nodes)
+    }
+    pub(crate) fn iter(&self) -> Iter<Token> {
+        self.tokens.iter()
+    }
     pub(crate) fn len(&self) -> usize {
         self.tokens.len()
     }
     pub(crate) fn from_string(source: &'a str) -> Result<Self, SimdevalError> {
-        let mut token_stream = TokenStream::with_capacity(source.len(), source);
+        let mut token_stream = Tokens::with_capacity(source.len(), source);
         for &chr in source.as_bytes() {
             token_stream.push(chr)?
         }
@@ -40,10 +59,8 @@ impl<'a> TokenStream<'a> {
             match chr {
                 b' ' => self.new_space(),
                 b':' => match token.kind() {
-                    TokenKind::Identifier(_) => {
-                        token.push(TokenKind::Namespace)
-                    }
-                    _ => self.new_token(chr)?
+                    TokenKind::Identifier(_) => token.push(TokenKind::Namespace),
+                    _ => self.new_token(chr)?,
                 },
                 b'0'..=b'9' => match token.kind() {
                     TokenKind::Identifier(_) => token.inc_span(),
