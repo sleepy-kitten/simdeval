@@ -10,3 +10,5 @@ fasteval = "0.2.4"
 [profile.bench]
 opt-level = 3
 # lto = true
+[profile.test]
+opt-level = 3

@@ -15,7 +15,8 @@ pub(crate) struct Token {
 }
 
 impl Token {
-    pub(crate) fn to_node<T>(
+    #[inline]
+    pub(crate) fn try_to_node<T>(
         &self,
         namespaces: &mut Iter<&str>,
         slice: &str,
@@ -23,25 +24,24 @@ impl Token {
     where
         T: Function<T>,
     {
+        //return Ok(Node::Literal(Value::Int(5)));
         Ok(match self.kind {
-            TokenKind::Operator(o) => Node::operator(o, None, None),
             TokenKind::Literal(l) => {
                 let value = match l {
                     Literal::Float => Value::Float(slice.parse::<f64>()?),
                     Literal::Int => Value::Int(slice.parse::<u64>()?),
-                    Literal::String => Value::String(slice.to_owned()),
+                    //Literal::String => Value::String(slice.to_owned()),
                 };
                 Node::Literal(value)
             }
-            TokenKind::Identifier(i) => {
-                match i {
-                    Identifier::Function => {
-                        let function: T = <T as Function<T>>::parse(namespaces, slice)?;
-                        Node::function(function, None)
-                    },
-                    Identifier::Variable => Node::variable(slice.to_owned(), None),
+            TokenKind::Operator(o) => Node::operator(o, None, None),
+            TokenKind::Identifier(i) => match i {
+                Identifier::Function => {
+                    let function: T = <T as Function<T>>::parse(namespaces, slice)?;
+                    Node::function(function, None)
                 }
-            }
+                Identifier::Variable => Node::variable(slice.to_owned(), None),
+            },
             TokenKind::Space => return Err(SimdevalError::UnexpectedToken),
             _ => return Err(SimdevalError::UnexpectedToken),
         })
@@ -130,12 +130,11 @@ pub(crate) enum TokenKind {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Literal {
-    String,
+    //String,
     Int,
     Float,
 }
 
-impl Literal {}
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Separator {
     Comma,
@@ -145,8 +144,8 @@ pub(crate) enum Separator {
 }
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Bracket {
-    Opened = 100,
-    Closed = -100,
+    Opened,
+    Closed,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -162,7 +161,7 @@ pub(crate) enum Operator {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Arithmetic {
-    Add = 11,
+    Add,
     Sub,
     Mul,
     Div,
@@ -171,7 +170,7 @@ pub(crate) enum Arithmetic {
 }
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Logical {
-    Not = 1,
+    Not,
     Equal,
     And,
     Or,

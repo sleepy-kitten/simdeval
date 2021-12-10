@@ -107,7 +107,7 @@ fn test_2() {
         args: None,
     };
 }
-fn test(mut tokens: Tokens) {
+fn test(tokens: Tokens) {
     for i in 1..tokens.len() - 1 {}
 }
 // 1 * 4 + ( 6 ^ 3 ^ 2 + 4 )

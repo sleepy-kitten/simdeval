@@ -1,8 +1,11 @@
-use std::{slice::Iter, str::FromStr};
+use std::slice::Iter;
 
 use crate::{
     error::SimdevalError,
-    parse::{node::Function, nodes::Nodes},
+    parse::{
+        node::{Function, Node},
+        nodes::Nodes,
+    }, stack::Stack,
 };
 
 use super::token::{
@@ -13,27 +16,33 @@ pub(crate) struct Tokens<'a> {
     tokens: Vec<Token>,
     source: &'a str,
 }
+
 impl<'a> Tokens<'a> {
+    #[inline]
     pub(crate) fn try_to_nodes<T>(&self) -> Result<Nodes<T>, SimdevalError>
     where
         T: Function<T>,
     {
         let mut offset = 0;
         let mut nodes = Nodes::with_capacity(self.len());
-        let mut namespaces = Vec::with_capacity(2);
-
+        //let mut namespaces = Vec::new();
+        let mut namespaces = Stack::<&str, 4>::new();
+        let mut span;
         for token in self.tokens.iter() {
-            let slice = self.slice_span(offset, token.span());
+            span = token.span();
             match token.kind() {
-                TokenKind::Namespace => namespaces.push(slice),
-                TokenKind::Separator(_) => (),
-                TokenKind::Space => (),
-                _ => {
-                    let node = token.to_node::<T>(&mut namespaces.iter(), slice)?;
-                    nodes.push(node);
-                    offset += token.span();
+                TokenKind::Namespace => {
+                    let slice = self.slice_span(offset, span);
+                    namespaces.push(slice)
+                }
+                TokenKind::Operator(_) | TokenKind::Identifier(_) | TokenKind::Literal(_) => {
+                    let slice = self.slice_span(offset, span);
+                    let node = token.try_to_node::<T>(&mut namespaces.iter(), slice)?;
+                    //nodes.push(node);
+                    offset += span;
                     namespaces.clear();
                 }
+                TokenKind::Separator(_) | TokenKind::Space => offset += span,
             }
         }
         Ok(nodes)
@@ -48,12 +57,12 @@ impl<'a> Tokens<'a> {
         self.tokens.len()
     }
     pub(crate) fn from_string(source: &'a str) -> Result<Self, SimdevalError> {
-        let mut token_stream = Tokens::with_capacity(source.len(), source);
+        let mut tokens = Tokens::with_capacity(source.len(), source);
         for &chr in source.as_bytes() {
-            token_stream.push(chr)?
+            tokens.push(chr)?
         }
-        token_stream.shrink_to_fit();
-        Ok(token_stream)
+        //token_stream.shrink_to_fit();
+        Ok(tokens)
     }
     fn get_char(&self, index: usize) -> Option<u8> {
         self.source.as_bytes().get(index).copied()
@@ -84,7 +93,7 @@ impl<'a> Tokens<'a> {
 
                 b'a'..=b'z' | b'A'..=b'Z' => match token.kind() {
                     TokenKind::Identifier(_) => token.inc_span(),
-                    TokenKind::Literal(Literal::String) => token.inc_span(),
+                    //TokenKind::Literal(Literal::String) => token.inc_span(),
                     _ => self.new_token(chr)?,
                 },
 

@@ -1,6 +1,9 @@
 #![feature(test)]
-//#![allow(dead_code)]
-
+#![feature(maybe_uninit_slice)]
+#![feature(maybe_uninit_extra)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 //! # Simdeval
 //!
 //! `simdeval` is a crate that allows you to evaluate expressions at runtime.
@@ -13,5 +16,6 @@
 mod lex;
 mod error;
 mod parse;
+mod stack;
 
 mod tests;

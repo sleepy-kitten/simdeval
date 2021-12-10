@@ -7,12 +7,22 @@ use super::node::{Function, Node};
 #[derive(Debug)]
 pub(crate) struct Nodes<T>
 where
-    T: Function<T>
+    T: Function<T>,
 {
     nodes: Vec<Node<T>>,
 }
 
+impl<T: Function<T>> FromIterator<Node<T>> for Nodes<T> {
+    fn from_iter<S: IntoIterator<Item = Node<T>>>(iter: S) -> Self {
+        Self {
+            nodes: Vec::from_iter(iter),
+        }
+    }
+}
 impl<T: Function<T>> Nodes<T> {
+    pub(crate) fn new(nodes: Vec<Node<T>>) -> Self {
+        Self { nodes }
+    }
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
             nodes: Vec::with_capacity(capacity),
