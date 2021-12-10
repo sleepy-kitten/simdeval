@@ -5,7 +5,8 @@ pub enum SimdevalError {
     UnkownCharacter(char),
     UnexpectedToken,
     NoIdentifierMatch,
-    InvalidToken
+    InvalidToken,
+    InvalidNamespace,
 }
 
 impl From<ParseFloatError> for SimdevalError {

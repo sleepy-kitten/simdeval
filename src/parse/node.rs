@@ -3,7 +3,7 @@ use std::{num::NonZeroUsize, slice::Iter, str::FromStr};
 use crate::{
     error::SimdevalError,
     lex::{
-        token::{Operator, Token},
+        token::{Bracket, Operator, Token},
         tokens::Tokens,
     },
 };
@@ -16,7 +16,7 @@ where
     /// prefix for faster parsing of function identifiers
     const NAMESPACE: &'static str;
     /// calls a function out of the possible functions of `T`
-    fn call(&self, node: &[Node<T>]) -> Value;
+    fn call<S: Function<S>>(&self, node: &[Node<S>]) -> Value;
     /// whether a function returns the same solution each time it is called
     /// `true` by default so it can be evaluated during compilation
     /// if set to `true` even though the function is not constant the expression might not behave as expected
@@ -32,8 +32,8 @@ where
 {
     Instruction {
         operator: Operator,
-        lhs: Option<usize>,
-        rhs: Option<usize>,
+        lhs: usize,
+        rhs: usize,
     },
     Literal(Value),
     Variable {
@@ -45,9 +45,16 @@ where
         function: T,
         args: Option<usize>,
     },
+    Bracket(Bracket),
 }
 impl<T: Function<T>> Node<T> {
-    pub(crate) fn operator(operator: Operator, lhs: Option<usize>, rhs: Option<usize>) -> Self {
+    pub(crate) fn zero() -> Self {
+        Self::Literal(Value::Int(0))
+    }
+    pub(crate) fn is_instruction(&self) -> bool {
+        matches!(self, Self::Instruction { .. })
+    }
+    pub(crate) fn instruction(operator: Operator, lhs: usize, rhs: usize) -> Self {
         Self::Instruction { operator, lhs, rhs }
     }
     pub(crate) fn variable(identifier: String, index: Option<usize>) -> Self {
@@ -55,6 +62,19 @@ impl<T: Function<T>> Node<T> {
     }
     pub(crate) fn function(function: T, args: Option<usize>) -> Self {
         Self::Function { function, args }
+    }
+    pub(crate) fn as_mut_instruction_indices(&mut self) -> Option<(&mut usize, &mut usize)> {
+        if let <Node<T>>::Instruction { operator, lhs, rhs } = self {
+            Some((lhs, rhs))
+        } else {
+            None
+        }
+    }
+    pub(crate) fn weight(&self) -> i16 {
+        match self {
+            Self::Instruction { operator, .. } => operator.weight(),
+            _ => 0,
+        }
     }
 }
 
@@ -66,7 +86,7 @@ impl<T: Function<T> + FromStr> TryFrom<Token> for Node<T> {
 }
 #[derive(Debug)]
 pub(crate) enum Value {
-    Int(u64),
+    Int(i64),
     Float(f64),
     Bool(bool),
     String(String),
@@ -80,9 +100,13 @@ pub enum Std {
     NaturalLog,
     SquareRoot,
 }
+
 impl Function<Std> for Std {
     const NAMESPACE: &'static str = "std";
-    fn call(&self, _: &[Node<Std>]) -> Value {
+    fn call<S>(&self, _: &[Node<S>]) -> Value
+    where
+        S: Function<S>,
+    {
         match self {
             Self::NaturalLog => Value::Int(313),
             Self::SquareRoot => Value::Float(2.14),
@@ -90,8 +114,16 @@ impl Function<Std> for Std {
     }
     fn parse(namespaces: &mut Iter<&str>, identifier: &str) -> Result<Std, SimdevalError> {
         if let Some(next) = namespaces.next() {
-            let slice = &next[0..next.len()-1];
-            <Std as Function<Std>>::parse(namespaces, identifier)
+            let slice = &next[0..next.len() - 1];
+            if slice == Self::NAMESPACE {
+                Ok(match identifier {
+                    "log" => Self::NaturalLog,
+                    "sqrt" => Self::SquareRoot,
+                    _ => return Err(SimdevalError::NoIdentifierMatch),
+                })
+            } else {
+                Err(SimdevalError::InvalidNamespace)
+            }
         } else {
             Ok(match identifier {
                 "log" => Self::NaturalLog,
@@ -101,14 +133,41 @@ impl Function<Std> for Std {
         }
     }
 }
-fn test_2() {
-    let node = Node::<Std>::Function {
-        function: Std::SquareRoot,
-        args: None,
-    };
+#[derive(Debug)]
+pub enum Test {
+    Std(Std),
+    Func,
+    Sqrt,
 }
-fn test(tokens: Tokens) {
-    for i in 1..tokens.len() - 1 {}
+impl Function<Test> for Test {
+    const NAMESPACE: &'static str = "test";
+    fn call<S>(&self, node: &[Node<S>]) -> Value
+    where
+        S: Function<S>,
+    {
+        match self {
+            Test::Std(s) => s.call(node),
+            Test::Func => Value::Bool(false),
+            Test::Sqrt => Value::Bool(true),
+        }
+    }
+    fn parse(namespaces: &mut Iter<&str>, identifier: &str) -> Result<Test, SimdevalError> {
+        if let Some(next) = namespaces.next() {
+            let slice = &next[0..next.len() - 1];
+            match slice {
+                Self::NAMESPACE => Ok(match identifier {
+                    "func" => Self::Func,
+                    "sqrt" => Self::Sqrt,
+                    _ => return Err(SimdevalError::NoIdentifierMatch),
+                }),
+                Std::NAMESPACE => Ok(Test::Std(Std::parse(namespaces, identifier)?)),
+
+                _ => Err(SimdevalError::InvalidNamespace),
+            }
+        } else {
+            Err(SimdevalError::InvalidNamespace)
+        }
+    }
 }
 // 1 * 4 + ( 6 ^ 3 ^ 2 + 4 )
 // 2 2 2 1 4 7 7 7 7 7 5 5 4

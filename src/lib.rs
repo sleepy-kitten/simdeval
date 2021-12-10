@@ -1,6 +1,8 @@
 #![feature(test)]
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_extra)]
+#![feature(more_qualified_paths)]
+#![deny(missing_docs)]
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]

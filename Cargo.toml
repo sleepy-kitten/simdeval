@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 fasteval = "0.2.4"
+evalexpr = "6.6.0"
 [profile.bench]
 opt-level = 3
 # lto = true

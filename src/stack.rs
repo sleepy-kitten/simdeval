@@ -1,5 +1,14 @@
 use std::{mem::MaybeUninit, slice::Iter};
 
+// I have no clue if any of this code causes UB I just hope it doesn't
+
+/// a wrapper around an array on the stack with a stack interface only allowing pushing and popping
+///
+/// # Panics
+///
+/// will panic if more is pushed to the stack than it can hold,
+/// or if more is popped than pushed
+
 pub(crate) struct Stack<T, const N: usize>
 where
     T: Copy,
@@ -48,7 +57,7 @@ where
     pub fn clear(&mut self) {
         for i in &mut self.array[0..self.index] {
             unsafe {
-                i.assume_init_drop();
+                i.assume_init();
                 *i = MaybeUninit::uninit();
             }
         }

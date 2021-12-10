@@ -15,7 +15,52 @@ pub(crate) struct Token {
 }
 
 impl Token {
-    #[inline]
+    pub(crate) fn parse_literal<T>(l: Literal, slice: &str) -> Result<Node<T>, SimdevalError>
+    where
+        T: Function<T>,
+    {
+        let value = match l {
+            Literal::Float => Value::Float(slice.parse::<f64>()?),
+            Literal::Int => Value::Int(slice.parse::<i64>()?),
+            //Literal::String => Value::String(slice.to_owned()),
+        };
+        Ok(Node::Literal(value))
+    }
+    pub(crate) fn parse_operator<T>(o: Operator) -> Result<Node<T>, SimdevalError>
+    where
+        T: Function<T>,
+    {
+        let node = Node::instruction(o, 0, 0);
+        Ok(node)
+    }
+    pub(crate) fn parse_separator<T>(s: Separator) -> Result<Node<T>, SimdevalError>
+    where
+        T: Function<T>,
+    {
+        if let Separator::Bracket(b) = s {
+            let node = Node::Bracket(b);
+            Ok(node)
+        } else {
+            Err(SimdevalError::UnexpectedToken)
+        }
+    }
+
+    pub(crate) fn parse_identifier<T>(
+        i: Identifier,
+        namespaces: &mut Iter<&str>,
+        slice: &str,
+    ) -> Result<Node<T>, SimdevalError>
+    where
+        T: Function<T>,
+    {
+        Ok(match i {
+            Identifier::Function => {
+                let function: T = <T as Function<T>>::parse(namespaces, slice)?;
+                Node::function(function, None)
+            }
+            Identifier::Variable => Node::variable(slice.to_owned(), None),
+        })
+    }
     pub(crate) fn try_to_node<T>(
         &self,
         namespaces: &mut Iter<&str>,
@@ -24,17 +69,16 @@ impl Token {
     where
         T: Function<T>,
     {
-        //return Ok(Node::Literal(Value::Int(5)));
         Ok(match self.kind {
             TokenKind::Literal(l) => {
                 let value = match l {
                     Literal::Float => Value::Float(slice.parse::<f64>()?),
-                    Literal::Int => Value::Int(slice.parse::<u64>()?),
+                    Literal::Int => Value::Int(slice.parse::<i64>()?),
                     //Literal::String => Value::String(slice.to_owned()),
                 };
                 Node::Literal(value)
             }
-            TokenKind::Operator(o) => Node::operator(o, None, None),
+            TokenKind::Operator(o) => Node::instruction(o, 0, 0),
             TokenKind::Identifier(i) => match i {
                 Identifier::Function => {
                     let function: T = <T as Function<T>>::parse(namespaces, slice)?;
@@ -42,52 +86,23 @@ impl Token {
                 }
                 Identifier::Variable => Node::variable(slice.to_owned(), None),
             },
-            TokenKind::Space => return Err(SimdevalError::UnexpectedToken),
+            TokenKind::Separator(s) => match s {
+                Separator::Bracket(b) => Node::Bracket(b),
+                _ => unreachable!(),
+            },
+            TokenKind::Special(_) => return Err(SimdevalError::UnexpectedToken),
             _ => return Err(SimdevalError::UnexpectedToken),
         })
     }
 }
-/*
-impl TryFrom<u8> for Token {
-    type Error = SimdevalError;
-    fn try_from(chr: u8) -> Result<Self, Self::Error> {
-        Ok(Token::new(match chr {
-            b'0'..=b'9' => TokenKind::Literal(Literal::Int),
-
-            b'a'..=b'z' | b'A'..=b'Z' => TokenKind::Identifier(Identifier::Variable),
-
-            b'+' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Add)),
-            b'-' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Sub)),
-            b'*' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Mul)),
-            b'/' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Div)),
-            b'%' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Mod)),
-            b'^' => TokenKind::Operator(Operator::Arithmetic(Arithmetic::Pow)),
-
-            b'=' => TokenKind::Operator(Operator::Logical(Logical::Equal)),
-            b'!' => TokenKind::Operator(Operator::Logical(Logical::Not)),
-            b'>' => TokenKind::Operator(Operator::Logical(Logical::Greater)),
-            b'<' => TokenKind::Operator(Operator::Logical(Logical::Less)),
-            b'&' => TokenKind::Operator(Operator::Logical(Logical::And)),
-            b'|' => TokenKind::Operator(Operator::Logical(Logical::Or)),
-            b'#' => TokenKind::Operator(Operator::Logical(Logical::Xor)),
-
-            b'(' => TokenKind::Separator(Separator::Bracket(Bracket::Opened)),
-            b')' => TokenKind::Separator(Separator::Bracket(Bracket::Closed)),
-            b'{' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
-            b'}' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
-            b'[' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
-            b']' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
-
-            b'.' => TokenKind::Literal(Literal::Float),
-            b',' => TokenKind::Separator(Separator::Comma),
-
-            _ => return Err(SimdevalError::UnkownCharacter(chr as char)),
-        }))
-    }
-}
-*/
 
 impl Token {
+    pub(crate) fn new_neg_zero() -> Self {
+        Self {
+            kind: TokenKind::Special(Special::NegZero),
+            span: 0,
+        }
+    }
     /// Get the token's span.
     pub(crate) fn span(&self) -> usize {
         self.span
@@ -107,7 +122,7 @@ impl Token {
     }
 
     /// set the kind and increments the span
-    pub(crate) fn push(&mut self, kind: TokenKind) {
+    pub(crate) fn set_inc(&mut self, kind: TokenKind) {
         self.kind = kind;
         self.inc_span()
     }
@@ -124,8 +139,13 @@ pub(crate) enum TokenKind {
     Operator(Operator),
     Identifier(Identifier),
     Separator(Separator),
+    Special(Special),
+}
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum Special {
     Namespace,
     Space,
+    NegZero,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -147,6 +167,14 @@ pub(crate) enum Bracket {
     Opened,
     Closed,
 }
+impl Bracket {
+    pub(crate) fn weight(&self) -> i16 {
+        match self {
+            Bracket::Opened => 100,
+            Bracket::Closed => -100,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Identifier {
@@ -158,6 +186,14 @@ pub(crate) enum Operator {
     Arithmetic(Arithmetic),
     Logical(Logical),
 }
+impl Operator {
+    pub(crate) fn weight(&self) -> i16 {
+        match self {
+            Operator::Arithmetic(a) => a.weight(),
+            Operator::Logical(l) => l.weight(),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Arithmetic {
@@ -168,6 +204,19 @@ pub(crate) enum Arithmetic {
     Mod,
     Pow,
 }
+impl Arithmetic {
+    pub(crate) fn weight(&self) -> i16 {
+        match self {
+            Arithmetic::Add => 20,
+            Arithmetic::Sub => 20,
+            Arithmetic::Mul => 22,
+            Arithmetic::Div => 22,
+            Arithmetic::Mod => 22,
+            Arithmetic::Pow => 23,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Logical {
     Not,
@@ -180,4 +229,20 @@ pub(crate) enum Logical {
     GreaterEqual,
     Less,
     LessEqual,
+}
+impl Logical {
+    pub(crate) fn weight(&self) -> i16 {
+        match self {
+            Logical::Not => 1,
+            Logical::Equal => 2,
+            Logical::And => 3,
+            Logical::Or => 4,
+            Logical::Xor => 5,
+            Logical::NotEqual => 6,
+            Logical::Greater => 7,
+            Logical::GreaterEqual => 8,
+            Logical::Less => 9,
+            Logical::LessEqual => 10,
+        }
+    }
 }

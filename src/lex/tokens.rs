@@ -5,11 +5,13 @@ use crate::{
     parse::{
         node::{Function, Node},
         nodes::Nodes,
-    }, stack::Stack,
+    },
+    stack::Stack,
 };
 
 use super::token::{
-    Arithmetic, Bracket, Identifier, Literal, Logical, Operator, Separator, Token, TokenKind,
+    Arithmetic, Bracket, Identifier, Literal, Logical, Operator, Separator, Special, Token,
+    TokenKind,
 };
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Tokens<'a> {
@@ -23,26 +25,43 @@ impl<'a> Tokens<'a> {
     where
         T: Function<T>,
     {
-        let mut offset = 0;
         let mut nodes = Nodes::with_capacity(self.len());
-        //let mut namespaces = Vec::new();
+        let mut offset = 0;
         let mut namespaces = Stack::<&str, 4>::new();
         let mut span;
         for token in self.tokens.iter() {
             span = token.span();
             match token.kind() {
-                TokenKind::Namespace => {
+                TokenKind::Special(Special::Space) => offset += span,
+                TokenKind::Special(Special::NegZero) => nodes.push(<Node<T>>::zero()),
+                TokenKind::Special(Special::Namespace) => {
                     let slice = self.slice_span(offset, span);
-                    namespaces.push(slice)
-                }
-                TokenKind::Operator(_) | TokenKind::Identifier(_) | TokenKind::Literal(_) => {
-                    let slice = self.slice_span(offset, span);
-                    let node = token.try_to_node::<T>(&mut namespaces.iter(), slice)?;
-                    //nodes.push(node);
+                    namespaces.push(slice);
                     offset += span;
-                    namespaces.clear();
                 }
-                TokenKind::Separator(_) | TokenKind::Space => offset += span,
+                TokenKind::Separator(s) => {
+                    let node = Token::parse_separator(*s)?;
+                    nodes.push(node);
+                    offset += span;
+                }
+                TokenKind::Operator(o) => {
+                    let node = Token::parse_operator(*o)?;
+                    nodes.push(node);
+                    offset += span;
+                }
+                TokenKind::Literal(l) => {
+                    let slice = self.slice_span(offset, span);
+                    let node = Token::parse_literal(*l, slice)?;
+                    nodes.push(node);
+                    offset += span;
+                }
+                TokenKind::Identifier(i) => {
+                    let slice = self.slice_span(offset, span);
+                    let node = Token::parse_identifier(*i, &mut namespaces.iter(), slice)?;
+                    nodes.push(node);
+                    namespaces.clear();
+                    offset += span;
+                }
             }
         }
         Ok(nodes)
@@ -56,7 +75,7 @@ impl<'a> Tokens<'a> {
     pub(crate) fn len(&self) -> usize {
         self.tokens.len()
     }
-    pub(crate) fn from_string(source: &'a str) -> Result<Self, SimdevalError> {
+    pub(crate) fn try_from_string(source: &'a str) -> Result<Self, SimdevalError> {
         let mut tokens = Tokens::with_capacity(source.len(), source);
         for &chr in source.as_bytes() {
             tokens.push(chr)?
@@ -77,12 +96,25 @@ impl<'a> Tokens<'a> {
         self.tokens.shrink_to_fit()
     }
     fn push(&mut self, chr: u8) -> Result<(), SimdevalError> {
+        let back_2_not_literal = self
+            .tokens
+            .get(self.tokens.len().wrapping_sub(2))
+            .and_then(|t| {
+                if let TokenKind::Literal(_) = t.kind() {
+                    Some(t)
+                } else {
+                    None
+                }
+            })
+            .is_none();
         let token = self.tokens.last_mut();
         if let Some(token) = token {
             match chr {
                 b' ' => self.new_space(),
                 b':' => match token.kind() {
-                    TokenKind::Identifier(_) => token.push(TokenKind::Namespace),
+                    TokenKind::Identifier(_) => {
+                        token.set_inc(TokenKind::Special(Special::Namespace))
+                    }
                     _ => self.new_token(chr)?,
                 },
                 b'0'..=b'9' => match token.kind() {
@@ -99,21 +131,25 @@ impl<'a> Tokens<'a> {
 
                 b'.' | b',' | b'_' | b'\'' => match (chr, token.kind()) {
                     (b'.', TokenKind::Literal(Literal::Int)) => {
-                        token.push(TokenKind::Literal(Literal::Float))
+                        token.set_inc(TokenKind::Literal(Literal::Float))
                     }
                     _ => self.new_token(chr)?,
                 },
 
                 b'+' | b'-' | b'*' | b'/' | b'%' | b'^' | b'&' | b'|' | b'!' | b'=' | b'<'
                 | b'>' | b'#' => match (chr, token.kind()) {
-                    (b'>', TokenKind::Operator(Operator::Logical(Logical::Equal))) => token.push(
-                        TokenKind::Operator(Operator::Logical(Logical::GreaterEqual)),
-                    ),
+                    (b'-', TokenKind::Operator(_) | TokenKind::Separator(_)) => {
+                        self.insert_neg();
+                    }
+                    (b'>', TokenKind::Operator(Operator::Logical(Logical::Equal))) => token
+                        .set_inc(TokenKind::Operator(Operator::Logical(
+                            Logical::GreaterEqual,
+                        ))),
                     (b'<', TokenKind::Operator(Operator::Logical(Logical::Equal))) => {
-                        token.push(TokenKind::Operator(Operator::Logical(Logical::LessEqual)))
+                        token.set_inc(TokenKind::Operator(Operator::Logical(Logical::LessEqual)))
                     }
                     (b'!', TokenKind::Operator(Operator::Logical(Logical::Equal))) => {
-                        token.push(TokenKind::Operator(Operator::Logical(Logical::NotEqual)))
+                        token.set_inc(TokenKind::Operator(Operator::Logical(Logical::NotEqual)))
                     }
                     _ => self.new_token(chr)?,
                 },
@@ -127,12 +163,27 @@ impl<'a> Tokens<'a> {
                 _ => return Err(SimdevalError::UnexpectedToken),
             }
         } else {
-            self.new_token(chr)?;
+            if chr == b'-' {
+                self.insert_neg();
+            } else {
+                self.new_token(chr)?;
+            }
         }
         Ok(())
     }
+    fn insert_neg(&mut self) {
+        self.new_neg_zero();
+        self.new_token_from_kind(TokenKind::Operator(Operator::Arithmetic(Arithmetic::Sub)));
+    }
+    fn new_neg_zero(&mut self) {
+        self.tokens.push(Token::new_neg_zero());
+    }
     fn new_space(&mut self) {
-        self.tokens.push(Token::new(TokenKind::Space));
+        self.tokens
+            .push(Token::new(TokenKind::Special(Special::Space)));
+    }
+    fn new_token_from_kind(&mut self, kind: TokenKind) {
+        self.tokens.push(Token::new(kind));
     }
     fn new_token(&mut self, chr: u8) -> Result<(), SimdevalError> {
         let token = Token::new(match chr {
@@ -157,13 +208,12 @@ impl<'a> Tokens<'a> {
 
             b'(' => TokenKind::Separator(Separator::Bracket(Bracket::Opened)),
             b')' => TokenKind::Separator(Separator::Bracket(Bracket::Closed)),
-            b'{' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
-            b'}' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
-            b'[' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
-            b']' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
-
+            //b'{' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
+            //b'}' => TokenKind::Separator(Separator::WavyBracket(Bracket::Closed)),
+            //b'[' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
+            //b']' => TokenKind::Separator(Separator::SquareBracket(Bracket::Closed)),
             b'.' => TokenKind::Literal(Literal::Float),
-            b',' => TokenKind::Separator(Separator::Comma),
+            //b',' => TokenKind::Separator(Separator::Comma),
             //b'\'' => TokenKind::Literal(Literal::String),
             //b'"' => TokenKind::Literal(Literal::String),
             _ => return Err(SimdevalError::UnkownCharacter(chr as char)),
