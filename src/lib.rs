@@ -19,5 +19,6 @@ mod lex;
 mod error;
 mod parse;
 mod stack;
+mod parse_new;
 
 mod tests;

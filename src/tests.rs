@@ -14,23 +14,24 @@ use crate::{
         node::{Node, Std, Test},
         nodes::Nodes,
     },
+    parse_new::{parse_element::ParseElement, parse_elements::ParseElements},
 };
 
 #[test]
-fn test_tokenizing_fast() {
+fn test_tokenizing() {
     let expression = "std:sqrt(2)";
     let stream_fast = Tokens::try_from_string(expression).unwrap();
     let sum: usize = stream_fast.tokens().iter().map(|t| t.span()).sum();
     assert_eq!(expression.len(), sum as usize);
     println!("stream_fast: {:#?}", stream_fast);
 }
-fn tokenize_fast(expression: &str) {
+fn tokenize(expression: &str) {
     Tokens::try_from_string(expression).unwrap();
 }
 #[bench]
-fn bench_tokenizing_fast(b: &mut test::Bencher) {
+fn bench_tokenizing(b: &mut test::Bencher) {
     let expression = "1/2+1*3^2+45*43231231541.35252";
-    b.iter(|| test::black_box(tokenize_fast(expression)))
+    b.iter(|| test::black_box(tokenize(expression)))
 }
 
 #[bench]
@@ -78,6 +79,34 @@ fn bench_node_creation(b: &mut test::Bencher) {
         )
     });
 }
+
+#[test]
+fn test_parse_fast() {
+    let expression = "1/2+1*3^2+45*43231231541.35252";
+    let mut test = ParseElements::<crate::parse_new::std::Std>::new(expression);
+    test.to_tokens().unwrap();
+    println!("test? {:#?}", test);
+    test.to_nodes().unwrap();
+    println!("test? {:#?}", test);
+    test.set_indices().unwrap();
+    println!("test? {:#?}", test);
+}
+#[bench]
+fn bench_parse_fast(b: &mut test::Bencher) {
+    let expression = "1/2+1*3^2+45*43231231541.35252";
+    b.iter(|| {
+        test::black_box({
+            let mut test = ParseElements::<crate::parse_new::std::Std>::new(expression);
+            test.to_tokens()
+                .unwrap()
+                .to_nodes()
+                .unwrap()
+                .set_indices()
+                .unwrap();
+        })
+    });
+}
+
 #[test]
 fn test_sizes() {
     println!("token:     {}", size_of::<Token>());
@@ -86,6 +115,7 @@ fn test_sizes() {
     println!("node:      {}", size_of::<Node<Std>>());
     println!("nodes:     {}", size_of::<Nodes<Std>>());
     println!("tokenkind: {}", size_of::<TokenKind>());
+    println!("str:       {}", size_of::<&str>());
     println!();
     println!("token:     {}", align_of::<Token>());
     println!("tokens:    {}", align_of::<Tokens>());
