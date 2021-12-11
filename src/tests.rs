@@ -3,7 +3,7 @@ extern crate test;
 
 use std::mem::{align_of, size_of};
 
-use fasteval::{Expression, Parser, Slab};
+use fasteval::{Parser, Slab};
 
 use crate::{
     lex::{
@@ -14,7 +14,7 @@ use crate::{
         node::{Node, Std, Test},
         nodes::Nodes,
     },
-    parse_new::{parse_element::ParseElement, parse_elements::ParseElements},
+    parse_new::{parse_element::ParseElement, expression::Expression},
 };
 
 #[test]
@@ -82,27 +82,24 @@ fn bench_node_creation(b: &mut test::Bencher) {
 
 #[test]
 fn test_parse_fast() {
-    let expression = "1/2+1*3^2+45*43231231541.35252";
-    let mut test = ParseElements::<crate::parse_new::std::Std>::new(expression);
-    test.to_tokens().unwrap();
-    println!("test? {:#?}", test);
-    test.to_nodes().unwrap();
-    println!("test? {:#?}", test);
-    test.set_indices().unwrap();
-    println!("test? {:#?}", test);
+    let expression = "!rer";
+    let mut expression = Expression::<crate::parse_new::std::Std>::new(expression);
+    expression.compile().unwrap();
+    println!("compiled: {:#?}", expression);
+    
 }
 #[bench]
 fn bench_parse_fast(b: &mut test::Bencher) {
     let expression = "1/2+1*3^2+45*43231231541.35252";
     b.iter(|| {
         test::black_box({
-            let mut test = ParseElements::<crate::parse_new::std::Std>::new(expression);
-            test.to_tokens()
-                .unwrap()
-                .to_nodes()
-                .unwrap()
-                .set_indices()
+            let mut test = Expression::<crate::parse_new::std::Std>::new(expression);
+            test.compile()
                 .unwrap();
+                //.to_nodes()
+                //.unwrap()
+                //.set_indices()
+                //.unwrap();
         })
     });
 }
@@ -123,4 +120,11 @@ fn test_sizes() {
     println!("node:      {}", align_of::<Node<Std>>());
     println!("nodes:     {}", align_of::<Nodes<Std>>());
     println!("tokenkind: {}", align_of::<TokenKind>());
+}
+
+#[test]
+fn test_fast_sizes() {
+    println!("element:   {}", size_of::<ParseElement<crate::parse_new::std::Std>>());
+    println!();
+    println!("element:   {}", align_of::<ParseElement<crate::parse_new::std::Std>>());
 }
