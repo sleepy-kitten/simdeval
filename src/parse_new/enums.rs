@@ -10,6 +10,7 @@ pub(crate) enum TokenKind {
 pub(crate) enum Literal {
     Int,
     Float,
+    Bool
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Bracket {
