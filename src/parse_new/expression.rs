@@ -10,7 +10,12 @@ use super::{
 use std::{cmp::Ordering, fmt::Debug};
 
 #[derive(Debug)]
-pub(crate) struct ParseElements<'a, T>
+
+/// An `Expression` contains the expression string and the compiled version of that expression.
+/// 
+/// # UB
+/// Compiling the same expression multiple times is UB 
+pub(crate) struct Expression<'a, T>
 where
     T: Function<T>,
 {
@@ -18,15 +23,23 @@ where
     expression: &'a str,
 }
 
-impl<'a, T: Function<T>> ParseElements<'a, T>
+impl<'a, T: Function<T>> Expression<'a, T>
 where
     T: Function<T> + Clone,
 {
+    #[inline]
     pub fn new(expression: &'a str) -> Self {
         Self {
             elements: Vec::with_capacity(expression.len()),
             expression,
         }
+    }
+    #[inline]
+    pub fn compile(&mut self) -> Result<(), SimdevalError> {
+        self.to_tokens()?.to_nodes()?.set_indices()
+    }
+    pub fn eval(&self) -> Result<Value, SimdevalError> {
+        
     }
     fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
         let token = Token::new(token_kind, start);
@@ -72,13 +85,13 @@ where
             index,
         )))
     }
-    pub fn to_tokens(&mut self) -> Result<&mut Self, SimdevalError> {
+    pub(crate) fn to_tokens(&mut self) -> Result<&mut Self, SimdevalError> {
         for (index, &chr) in self.expression.as_bytes().iter().enumerate() {
             self.push(chr, index)?;
         }
         Ok(self)
     }
-    pub fn to_nodes(&mut self) -> Result<&mut Self, SimdevalError> {
+    pub(crate) fn to_nodes(&mut self) -> Result<&mut Self, SimdevalError> {
         let mut namespaces = Stack::<&str, 4>::new();
         let string = self.expression;
         for element in &mut self.elements {
@@ -99,7 +112,7 @@ where
         }
         Ok(self)
     }
-    pub fn set_indices(&mut self) -> Result<(), SimdevalError> {
+    pub(crate) fn set_indices(&mut self) -> Result<(), SimdevalError> {
         let mut weight = 0;
         let mut iter = self
             .elements
@@ -172,8 +185,7 @@ where
                     TokenKind::Identifier(_) => token.inc_end(),
                     _ => {
                         self.new_token_from_kind(TokenKind::Identifier(Identifier::Variable), index)
-                    }
-                    //_ => self.new_token(chr, index)?,
+                    } //_ => self.new_token(chr, index)?,
                 },
                 b'.' => match token.kind() {
                     TokenKind::Literal(Literal::Int) => {
