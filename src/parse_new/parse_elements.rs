@@ -28,6 +28,10 @@ where
             expression,
         }
     }
+    fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
+        let token = Token::new(token_kind, start);
+        self.elements.push(ParseElement::Token(token));
+    }
     fn new_token(&mut self, chr: u8, start: usize) -> Result<(), SimdevalError> {
         let token_kind = match chr {
             b'0'..=b'9' => TokenKind::Literal(Literal::Int),
@@ -156,21 +160,27 @@ where
                     TokenKind::Identifier(_) => {
                         token.set_kind(TokenKind::Special(Special::Namespace));
                     }
-                    _ => self.new_token(chr, index)?,
+                    //_ => self.new_token(chr, index)?,
+                    _ => return Err(SimdevalError::UnexpectedToken),
                 },
                 b'0'..=b'9' => match token.kind() {
                     TokenKind::Identifier(_) | TokenKind::Literal(_) => token.inc_end(),
-                    _ => self.new_token(chr, index)?,
+                    //_ => self.new_token(chr, index)?,
+                    _ => self.new_token_from_kind(TokenKind::Literal(Literal::Int), index),
                 },
                 b'a'..=b'z' | b'A'..=b'Z' => match token.kind() {
                     TokenKind::Identifier(_) => token.inc_end(),
-                    _ => self.new_token(chr, index)?,
+                    _ => {
+                        self.new_token_from_kind(TokenKind::Identifier(Identifier::Variable), index)
+                    }
+                    //_ => self.new_token(chr, index)?,
                 },
-                b'.' => match (chr, token.kind()) {
-                    (b'.', TokenKind::Literal(Literal::Int)) => {
+                b'.' => match token.kind() {
+                    TokenKind::Literal(Literal::Int) => {
                         token.set_inc(TokenKind::Literal(Literal::Float))
                     }
-                    _ => self.new_token(chr, index)?,
+                    _ => self.new_token_from_kind(TokenKind::Literal(Literal::Float), index),
+                    //_ => return Err(SimdevalError::UnexpectedToken)
                 },
                 b'+' | b'-' | b'*' | b'/' | b'%' | b'^' | b'&' | b'|' | b'!' | b'=' | b'<'
                 | b'>' | b'#' => match (chr, token.kind()) {
@@ -191,9 +201,11 @@ where
                 b'(' | b')' => match (chr, token.kind()) {
                     (b'(', TokenKind::Identifier(_)) => {
                         token.set_kind(TokenKind::Identifier(Identifier::Function));
-                        self.new_token(chr, index)?;
+                        //self.new_token(chr, index)?;
+                        self.new_token_from_kind(TokenKind::Bracket(Bracket::Opened), index)
                     }
-                    _ => self.new_token(chr, index)?,
+                    //_ => self.new_token(chr, index)?,
+                    _ => self.new_token_from_kind(TokenKind::Bracket(Bracket::Opened), index),
                 },
                 _ => return Err(SimdevalError::UnexpectedToken),
             }
