@@ -3,8 +3,6 @@ extern crate test;
 
 use std::mem::{align_of, size_of};
 
-use fasteval::{Parser, Slab};
-
 use crate::{
     lex::{
         token::{Token, TokenKind},
@@ -34,24 +32,6 @@ fn bench_tokenizing(b: &mut test::Bencher) {
     b.iter(|| test::black_box(tokenize(expression)))
 }
 
-#[bench]
-fn bench_fasteval(b: &mut test::Bencher) {
-    let expression = "1/2+1*3^2+45*43231231541.35252";
-    b.iter(|| {
-        test::black_box({
-            let mut slab = Slab::new();
-            let parser = Parser::new();
-            parser.parse(expression, &mut slab.ps)
-        })
-    })
-}
-
-#[bench]
-fn bench_evalexpr(b: &mut test::Bencher) {
-    let expression = "1/2+1*3^2+45*43231231541.35252";
-    b.iter(|| test::black_box(evalexpr::build_operator_tree(expression)))
-}
-
 #[test]
 fn test_node_creation() {
     //let expression = "a/2+1*3^2+45*4323123154135252";
@@ -65,7 +45,7 @@ fn test_node_creation() {
     println!("nodes: {:#?}", nodes);
 }
 #[bench]
-fn bench_node_creation(b: &mut test::Bencher) {
+fn bench_parse(b: &mut test::Bencher) {
     let expression = "1/2+1*3^2+45*43231231541.35252";
     //let tokens = Tokens::try_from_string(expression).unwrap();
     //b.iter(|| test::black_box(tokens.try_to_nodes::<Std>().unwrap()));
@@ -82,9 +62,10 @@ fn bench_node_creation(b: &mut test::Bencher) {
 
 #[test]
 fn test_parse_fast() {
-    let expression = "!rer";
+    let expression = "1/2+1*3^2+45*43231231541.35252";
     let mut expression = Expression::<crate::parse_new::std::Std>::new(expression);
     expression.compile().unwrap();
+    //let temp = expression;
     println!("compiled: {:#?}", expression);
     
 }
