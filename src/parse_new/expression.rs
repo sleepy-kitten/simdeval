@@ -12,17 +12,103 @@ use std::{cmp::Ordering, fmt::Debug};
 #[derive(Debug)]
 
 /// An `Expression` contains the expression string and the compiled version of that expression.
-/// 
+///
 /// # UB
-/// Compiling the same expression multiple times is UB 
+/// Compiling the same expression multiple times is UB
 pub(crate) struct Expression<'a, T>
 where
     T: Function<T>,
 {
     elements: Vec<ParseElement<'a, T>>,
+    eval_stack: Vec<usize>,
     expression: &'a str,
+    top_node: usize,
 }
 
+impl<'a, 'b , T: Function<T>> Expression<'a, T> {
+    pub(crate) fn set_indices(&'b mut self) -> Result<(), SimdevalError> {
+        struct HighestWeight {
+            weight: i16,
+            index: usize,
+        }
+        struct NodeInfo<'a,'b, T>
+        where
+            T: Function<T>,
+        {
+            index: usize,
+            node: &'b mut Node<'a, T>,
+            weight: i16,
+        }
+        let mut bracket_weight = 0;
+        let mut highest_weight = HighestWeight {
+            weight: 0,
+            index: 0,
+        };
+        let mut iter = self
+            .elements
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(index, e)| match e {
+                ParseElement::<'a, T>::Node(node) => match node {
+                    <Node<T>>::Instruction {
+                        operator: o,
+                        lhs,
+                        rhs,
+                    } => {
+                        *lhs = index - 1;
+                        *rhs = index + 1;
+                        let weight = o.weight();
+                        let info = NodeInfo::<'a, 'b,T> {
+                            index,
+                            node,
+                            weight: weight + bracket_weight,
+                        };
+                        Some(info)
+                    }
+                    _ => None,
+                },
+                ParseElement::Token(t) => match t.kind() {
+                    TokenKind::Bracket(b) => {
+                        bracket_weight += b.weight();
+                        None
+                    }
+                    _ => None,
+                },
+            })
+            .peekable();
+        loop {
+            let c = iter.next();
+            let n = iter.peek_mut();
+            if let Some(next) = n {
+                let curr = c.unwrap();
+                let ord = curr.weight.cmp(&next.weight);
+
+                match ord {
+                    Ordering::Equal | Ordering::Greater => {
+                        let (lhs, _) = next.node.as_mut_instruction_indices().unwrap();
+                        *lhs = curr.index;
+                        if highest_weight.weight < curr.weight {
+                            highest_weight.weight = curr.weight;
+                            highest_weight.index = curr.index;
+                        }
+                    }
+                    Ordering::Less => {
+                        let (_, rhs) = curr.node.as_mut_instruction_indices().unwrap();
+                        *rhs = next.index;
+                        if highest_weight.weight < next.weight {
+                            highest_weight.weight = next.weight;
+                            highest_weight.index = next.index;
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        self.top_node = highest_weight.index;
+        Ok(())
+    }
+}
 impl<'a, T: Function<T>> Expression<'a, T>
 where
     T: Function<T> + Clone,
@@ -31,15 +117,19 @@ where
     pub fn new(expression: &'a str) -> Self {
         Self {
             elements: Vec::with_capacity(expression.len()),
+            eval_stack: Vec::with_capacity(expression.len()/2),
             expression,
+            top_node: 0,
         }
     }
     #[inline]
     pub fn compile(&mut self) -> Result<(), SimdevalError> {
         self.to_tokens()?.to_nodes()?.set_indices()
     }
+    pub fn optimize(&mut self) {}
     pub fn eval(&self) -> Result<Value, SimdevalError> {
-        
+
+        todo!()
     }
     fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
         let token = Token::new(token_kind, start);
@@ -111,59 +201,6 @@ where
             }
         }
         Ok(self)
-    }
-    pub(crate) fn set_indices(&mut self) -> Result<(), SimdevalError> {
-        let mut weight = 0;
-        let mut iter = self
-            .elements
-            .iter_mut()
-            .enumerate()
-            .filter_map(|(i, e)| match e {
-                ParseElement::Node(n) => match n {
-                    <Node<T>>::Instruction {
-                        operator: o,
-                        lhs,
-                        rhs,
-                    } => {
-                        *lhs = i - 1;
-                        *rhs = i + 1;
-                        Some((i, n, weight))
-                    }
-                    _ => None,
-                },
-                ParseElement::Token(t) => match t.kind() {
-                    TokenKind::Bracket(b) => {
-                        weight += b.weight();
-                        None
-                    }
-                    _ => None,
-                },
-            })
-            .peekable();
-        loop {
-            let c = iter.next();
-            let n = iter.peek_mut();
-            if let Some(next) = n {
-                let curr = c.unwrap();
-                let curr_weight = curr.1.weight() + curr.2;
-                let next_weight = next.1.weight() + next.2;
-                let ord = curr_weight.cmp(&next_weight);
-
-                match ord {
-                    Ordering::Equal | Ordering::Greater => {
-                        let (lhs, _) = next.1.as_mut_instruction_indices().unwrap();
-                        *lhs = curr.0;
-                    }
-                    Ordering::Less => {
-                        let (_, rhs) = curr.1.as_mut_instruction_indices().unwrap();
-                        *rhs = next.0;
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-        Ok(())
     }
     fn push(&mut self, chr: u8, index: usize) -> Result<(), SimdevalError> {
         if let Some(ParseElement::Token(token)) = self.elements.last_mut() {
