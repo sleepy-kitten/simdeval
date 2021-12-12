@@ -15,9 +15,7 @@
 //! invoked using function like syntax.
 
 
-mod lex;
 mod error;
-mod parse;
 mod stack;
 mod parse_new;
 
