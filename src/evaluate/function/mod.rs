@@ -1,9 +1,11 @@
-use std::slice::Iter;
+use ::std::slice::Iter;
 
 use crate::error::SimdevalError;
 
 use super::{node::Node, enums::Value};
 
+pub mod std;
+pub mod function_macro;
 pub(crate) trait Function<T>
 where
     T: Function<T>,
@@ -12,7 +14,7 @@ where
     const MAX_ARGS: u8;
     fn from_string(namespaces: &mut Iter<&str>, identifier: &str) -> Result<T, SimdevalError>;
     fn call<S: Function<S>>(&self, node: &[Node<S>]) -> Value;
-    fn is_const() -> bool {
+    fn is_const(&self) -> bool {
         true
     }
 }

@@ -1,5 +1,7 @@
-use super::{function::Function, enums::Value};
-use crate::error::SimdevalError;
+
+use crate::{error::SimdevalError, evaluate::{enums::Value, node::Node}};
+
+use super::Function;
 #[derive(Debug, Clone)]
 pub(crate) enum Std {
     Sqrt,
@@ -31,7 +33,7 @@ impl Function<Std> for Std {
             })
         }
     }
-    fn call<S: Function<S>>(&self, node: &[super::node::Node<S>]) -> super::enums::Value {
+    fn call<S: Function<S>>(&self, node: &[Node<S>]) -> Value {
         match self {
             Self::Log => Value::Int(1),
             Self::Sqrt => Value::Int(2),
