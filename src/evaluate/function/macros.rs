@@ -19,9 +19,9 @@ macro_rules! functions {
                 ) -> Result<$lib_name, crate::error::SimdevalError> {
                     Err(crate::error::SimdevalError::UnexpectedToken)
                 }
-                fn call<S: Function<S>>(&self, node: &[Node<S>]) -> Value {
+                fn call(&self, node: &[Value]) -> Value {
                     match self {
-                        $($lib_name::$fn_name => $fn_body,)+
+                        $($lib_name::$fn_name => {let node = node; $fn_body},)+
                     }
                 }
                 fn is_const(&self) -> bool {

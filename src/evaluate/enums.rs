@@ -48,7 +48,7 @@ pub(crate) enum Special {
     NegZero,
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum Value {
+pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),

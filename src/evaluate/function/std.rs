@@ -33,7 +33,7 @@ impl Function<Std> for Std {
             })
         }
     }
-    fn call<S: Function<S>>(&self, node: &[Node<S>]) -> Value {
+    fn call(&self, node: &[Value]) -> Value {
         match self {
             Self::Log => Value::Int(1),
             Self::Sqrt => Value::Int(2),
