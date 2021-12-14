@@ -7,7 +7,7 @@ use super::{
     parse_element::ParseElement,
     token::Token,
 };
-use std::{cmp::Ordering, fmt::Debug};
+use std::{cmp::Ordering, collections::HashMap, fmt::Debug};
 
 #[derive(Debug)]
 
@@ -20,18 +20,20 @@ where
     T: Function<T>,
 {
     elements: Vec<ParseElement<'a, T>>,
+    variables: Vec<Value>,
     eval_stack: Vec<usize>,
     expression: &'a str,
     top_node: usize,
 }
 
-impl<'a, 'b , T: Function<T>> Expression<'a, T> {
+impl<'a, 'b, T: Function<T>> Expression<'a, T> {
     pub(crate) fn set_indices(&'b mut self) -> Result<(), SimdevalError> {
+        #[derive(Debug)]
         struct HighestWeight {
             weight: i16,
             index: usize,
         }
-        struct NodeInfo<'a,'b, T>
+        struct NodeInfo<'a, 'b, T>
         where
             T: Function<T>,
         {
@@ -58,7 +60,7 @@ impl<'a, 'b , T: Function<T>> Expression<'a, T> {
                         *lhs = index - 1;
                         *rhs = index + 1;
                         let weight = o.weight();
-                        let info = NodeInfo::<'a, 'b,T> {
+                        let info = NodeInfo::<'a, 'b, T> {
                             index,
                             node,
                             weight: weight + bracket_weight,
@@ -87,15 +89,21 @@ impl<'a, 'b , T: Function<T>> Expression<'a, T> {
                     Ordering::Equal | Ordering::Greater => {
                         let (lhs, _) = next.node.as_mut_instruction_indices().unwrap();
                         *lhs = curr.index;
-                        if highest_weight.weight < curr.weight {
-                            highest_weight.weight = curr.weight;
-                            highest_weight.index = curr.index;
-                        }
                     }
                     Ordering::Less => {
                         let (_, rhs) = curr.node.as_mut_instruction_indices().unwrap();
                         *rhs = next.index;
-                        if highest_weight.weight < next.weight {
+                    }
+                }
+                match ord {
+                    Ordering::Greater => {
+                        if highest_weight.weight <= curr.weight {
+                            highest_weight.weight = curr.weight;
+                            highest_weight.index = curr.index;
+                        }
+                    }
+                    Ordering::Equal | Ordering::Less => {
+                        if highest_weight.weight <= next.weight {
                             highest_weight.weight = next.weight;
                             highest_weight.index = next.index;
                         }
@@ -108,29 +116,46 @@ impl<'a, 'b , T: Function<T>> Expression<'a, T> {
         self.top_node = highest_weight.index;
         Ok(())
     }
+
+    pub(crate) fn store_variables(&'b mut self) -> &mut Self {
+        let mut stored = HashMap::<&str, usize>::with_capacity(self.elements.len() / 2);
+        let mut index = 0_usize;
+        let string = self.expression;
+        for element in &mut self.elements {
+            if let ParseElement::Token(token) = element {
+                if let TokenKind::Identifier(Identifier::Variable) = token.kind() {
+                    let identifier = token.slice(string);
+                    if let Some(v) = stored.get(identifier) {}
+                }
+            }
+        }
+        self
+    }
+
+    /// Get a reference to the expression's elements.
+    pub(crate) fn elements(&self) -> &[ParseElement<T>] {
+        self.elements.as_ref()
+    }
 }
 impl<'a, T: Function<T>> Expression<'a, T>
 where
-    T: Function<T> + Clone,
+    T: Function<T> + Clone + Debug,
 {
     #[inline]
     pub fn new(expression: &'a str) -> Self {
         Self {
             elements: Vec::with_capacity(expression.len()),
-            eval_stack: Vec::with_capacity(expression.len()/2),
+            variables: Vec::with_capacity(expression.len() / 2),
+            eval_stack: Vec::with_capacity(expression.len() / 2),
             expression,
             top_node: 0,
         }
     }
     #[inline]
     pub fn compile(&mut self) -> Result<(), SimdevalError> {
-        self.to_tokens()?.to_nodes()?.set_indices()
+        self.to_tokens()?.to_nodes::<4, 16>()?.set_indices()
     }
     pub fn optimize(&mut self) {}
-    pub fn eval(&self) -> Result<Value, SimdevalError> {
-
-        todo!()
-    }
     fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
         let token = Token::new(token_kind, start);
         self.elements.push(ParseElement::Token(token));
@@ -181,14 +206,40 @@ where
         }
         Ok(self)
     }
-    pub(crate) fn to_nodes(&mut self) -> Result<&mut Self, SimdevalError> {
-        let mut namespaces = Stack::<&str, 4>::new();
+    pub(crate) fn to_nodes<const N: usize, const V: usize>(
+        &mut self,
+    ) -> Result<&mut Self, SimdevalError> {
+        let mut namespaces = Stack::<&str, N>::new();
+        let mut stored_variables = HashMap::<&str, usize>::with_capacity(self.expression.len() / 2);
+        let mut last_variable_index = 0_usize;
         let string = self.expression;
         for element in &mut self.elements {
             if let ParseElement::Token(token) = element {
                 match token.kind() {
-                    TokenKind::Literal(_) | TokenKind::Operator(_) | TokenKind::Identifier(_) => {
-                        element.to_node_clone(&mut namespaces.iter(), string)?
+                    TokenKind::Literal(l) => {
+                        let value = match l {
+                            Literal::Bool => Value::Bool(token.slice(string).parse::<bool>()?),
+                            Literal::Float => Value::Float(token.slice(string).parse::<f64>()?),
+                            Literal::Int => Value::Int(token.slice(string).parse::<i64>()?),
+                        };
+                        *element = ParseElement::Node(Node::Literal(value));
+                    }
+                    TokenKind::Operator(o) => {
+                        *element = ParseElement::Node(Node::Instruction {
+                            operator: o,
+                            lhs: 0,
+                            rhs: 0,
+                        })
+                    }
+                    TokenKind::Identifier(Identifier::Function) => {
+                        let identifier = token.slice(string);
+                        let mut namespaces = namespaces.iter();
+                        let function =
+                            <T as Function<T>>::from_string(&mut namespaces, identifier)?;
+                        *element = ParseElement::Node(Node::Function {
+                            function,
+                            args: None,
+                        })
                     }
                     TokenKind::Bracket(b) => (),
                     TokenKind::Special(Special::Namespace) => {
@@ -196,6 +247,16 @@ where
                     }
                     TokenKind::Special(Special::NegZero) => {
                         *element = ParseElement::Node(Node::Literal(Value::Int(0)));
+                    }
+                    TokenKind::Identifier(Identifier::Variable) => {
+                        let identifier = token.slice(string);
+                        let index = *stored_variables.entry(identifier).or_insert_with(|| {
+                            let temp = last_variable_index;
+                            self.variables.push(Value::Int(0));
+                            last_variable_index += 1;
+                            temp
+                        });
+                        *element = ParseElement::Node(Node::Variable { index });
                     }
                 };
             }
@@ -266,5 +327,47 @@ where
             }
         }
         Ok(())
+    }
+}
+
+impl<'a, T: Function<T>> Expression<'a, T>
+where
+    T: Function<T> + Clone + Debug,
+{
+    pub fn eval(&mut self) -> Result<Value, SimdevalError> {
+        /*
+        let mut current = self.top_node;
+        loop {
+            if let ParseElement::Token(_) = self.elements[current] {
+                panic!("referenced node was a token")
+            }
+            let children = self.get_operands(current);
+            if let Some(children) = children {
+                let current = children.0;
+                self.eval_stack.push(children.1);
+            }
+        }
+        */
+        Ok(self.eval_recursive())
+    }
+    fn eval_recursive(&self) -> Value {
+        self.eval_at_recursive(self.top_node)
+    }
+    fn eval_at_recursive(&self, index: usize) -> Value {
+        if let ParseElement::Node(n) = &self.elements[index] {
+            match n {
+                Node::Instruction { operator, lhs, rhs } => {
+                    operator.eval(self.eval_at_recursive(*lhs), self.eval_at_recursive(*rhs))
+                }
+                Node::Literal(value) => *value,
+                Node::Variable { index } => panic!(),
+                Node::Function { function, args } => todo!(),
+            }
+        } else {
+            panic!()
+        }
+    }
+    fn get_operands(&self, index: usize) -> Option<(usize, usize)> {
+        self.elements[index].get_operands_indices()
     }
 }
