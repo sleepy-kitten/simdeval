@@ -1,32 +1,42 @@
 #[macro_export]
-macro_rules! functions {
-    ($lib_name: ident; $($fn_name: ident($($args: ty),*) -> $fn_body: expr $(,$is_const: expr)?);+) => {
-            use crate::error::SimdevalError;
-            use crate::evaluate::enums::Value;
-            use crate::evaluate::function::Function;
-            use crate::evaluate::node::Node;
-            use std::slice::Iter;
-            #[allow(non_camel_case_types)]
-            enum $lib_name {
-                $($fn_name),+
+macro_rules! impl_functions {
+    ($lib_name: ident: $lib_namespace: ident; [$($import: ty: $import_name: ident),*]; [$($func_name: ident: $func: ident),+]) => {
+        #[allow(non_camel_case_types)]
+        #[derive(Debug, Clone)]
+        enum $lib_name {
+            $($func_name),+,
+            $($import_name($import)),+
+        }
+        impl crate::evaluate::function::Function<$lib_name> for $lib_name {
+            const NAMESPACE: &'static str = stringify!($lib_namespace);
+            const MAX_ARGS: u8 = 4;
+            fn from_string(
+                namespaces: &mut std::slice::Iter<&str>,
+                identifier: &str,
+            ) -> Result<$lib_name, crate::error::SimdevalError> {
+                if let Some(&namespace) = dbg!(namespaces.next()) {
+                    // let namespace =  &namespace[0..namespace.len()-1];
+                    Ok(match namespace {
+                        $(<$import>::NAMESPACE => $lib_name::$import_name(<$import>::from_string(namespaces, identifier)?),)+
+                        Self::NAMESPACE => Self::from_string(namespaces, identifier)?,
+                        _ => return Err(crate::error::SimdevalError::InvalidNamespace)
+                    })
+                } else {
+                    Ok(match dbg!(identifier) {
+                        $(stringify!($func) => $lib_name::$func_name,)+
+                        _ => return  Err(crate::error::SimdevalError::UnexpectedToken)
+                    })
+                }
             }
-            impl Function<$lib_name> for $lib_name {
-                const NAMESPACE: &'static str = stringify!($ty);
-                const MAX_ARGS: u8 = 4;
-                fn from_string(
-                    namespaces: &mut Iter<&str>,
-                    identifier: &str,
-                ) -> Result<$lib_name, crate::error::SimdevalError> {
-                    Err(crate::error::SimdevalError::UnexpectedToken)
-                }
-                fn call(&self, node: &[Value]) -> Value {
-                    match self {
-                        $($lib_name::$fn_name => {let node = node; $fn_body},)+
-                    }
-                }
-                fn is_const(&self) -> bool {
-                    true
-                }
+            fn call(&self, args: &[crate::evaluate::enums::Value]) -> Result<crate::evaluate::enums::Value, crate::error::SimdevalError> {
+                Ok(match self {
+                    $($lib_name::$func_name => $func(args.try_into()?),)+
+                    $($lib_name::$import_name(i) => i.call(args)?,)+
+                })
             }
-    };
+            fn is_const(&self) -> bool {
+                true
+            }
+        }
+    }
 }
