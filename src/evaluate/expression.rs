@@ -1,11 +1,13 @@
 use crate::{error::SimdevalError, stack::Stack};
 
 use super::{
-    enums::{Bracket, Identifier, Literal, Operator, Special, TokenKind, Value},
+    enums::{Bracket, Identifier, Literal, Operator, Special, TokenKind},
     function::Function,
     node::Node,
     parse_element::ParseElement,
     token::Token,
+    value::single::Value,
+    variables::Variables,
 };
 use std::{cmp::Ordering, collections::HashMap, fmt::Debug};
 
@@ -20,15 +22,13 @@ where
     T: Function<T>,
 {
     elements: Vec<ParseElement<'a, T>>,
-    variables: Vec<Value>,
-    eval_stack: Vec<usize>,
+    variables: Variables<'a>,
     expression: &'a str,
     top_node: usize,
 }
 
 impl<'a, 'b, T: Function<T>> Expression<'a, T> {
     pub(crate) fn set_indices(&'b mut self) -> Result<(), SimdevalError> {
-        #[derive(Debug)]
         struct HighestWeight {
             weight: i16,
             index: usize,
@@ -86,23 +86,25 @@ impl<'a, 'b, T: Function<T>> Expression<'a, T> {
                 let ord = curr.weight.cmp(&next.weight);
 
                 match ord {
-                    Ordering::Equal | Ordering::Greater => {
-                        let (lhs, _) = next.node.as_mut_instruction_indices().unwrap();
+                    Ordering::Equal => {
+                        let (lhs, _) = next.node.as_mut_instruction_indices();
                         *lhs = curr.index;
-                    }
-                    Ordering::Less => {
-                        let (_, rhs) = curr.node.as_mut_instruction_indices().unwrap();
-                        *rhs = next.index;
-                    }
-                }
-                match ord {
-                    Ordering::Greater => {
                         if highest_weight.weight <= curr.weight {
                             highest_weight.weight = curr.weight;
                             highest_weight.index = curr.index;
                         }
                     }
-                    Ordering::Equal | Ordering::Less => {
+                    Ordering::Greater => {
+                        let (lhs, _) = next.node.as_mut_instruction_indices();
+                        *lhs = curr.index;
+                        if highest_weight.weight <= curr.weight {
+                            highest_weight.weight = curr.weight;
+                            highest_weight.index = curr.index;
+                        }
+                    }
+                    Ordering::Less => {
+                        let (_, rhs) = curr.node.as_mut_instruction_indices();
+                        *rhs = next.index;
                         if highest_weight.weight <= next.weight {
                             highest_weight.weight = next.weight;
                             highest_weight.index = next.index;
@@ -116,22 +118,6 @@ impl<'a, 'b, T: Function<T>> Expression<'a, T> {
         self.top_node = highest_weight.index;
         Ok(())
     }
-
-    pub(crate) fn store_variables(&'b mut self) -> &mut Self {
-        let mut stored = HashMap::<&str, usize>::with_capacity(self.elements.len() / 2);
-        let mut index = 0_usize;
-        let string = self.expression;
-        for element in &mut self.elements {
-            if let ParseElement::Token(token) = element {
-                if let TokenKind::Identifier(Identifier::Variable) = token.kind() {
-                    let identifier = token.slice(string);
-                    if let Some(v) = stored.get(identifier) {}
-                }
-            }
-        }
-        self
-    }
-
     /// Get a reference to the expression's elements.
     pub(crate) fn elements(&self) -> &[ParseElement<T>] {
         self.elements.as_ref()
@@ -145,11 +131,18 @@ where
     pub fn new(expression: &'a str) -> Self {
         Self {
             elements: Vec::with_capacity(expression.len()),
-            variables: Vec::with_capacity(expression.len() / 2),
-            eval_stack: Vec::with_capacity(expression.len() / 2),
+            variables: Variables::with_capacity(expression.len() / 2),
             expression,
             top_node: 0,
         }
+    }
+    pub fn clear(&mut self) {
+        self.elements.clear();
+        self.variables.clear()
+    }
+    pub fn set_expression(&mut self, expression: &'a str) {
+        self.clear();
+        self.expression = expression;
     }
     #[inline]
     pub fn compile(&mut self) -> Result<(), SimdevalError> {
@@ -159,6 +152,9 @@ where
     fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
         let token = Token::new(token_kind, start);
         self.elements.push(ParseElement::Token(token));
+    }
+    pub fn set_variable(&mut self, identifier: &'a str, value: Value) -> Result<(), SimdevalError> {
+        self.variables.set(identifier, value)
     }
     fn new_token(&mut self, chr: u8, start: usize) -> Result<(), SimdevalError> {
         let token_kind = match chr {
@@ -210,8 +206,6 @@ where
         &mut self,
     ) -> Result<&mut Self, SimdevalError> {
         let mut namespaces = Stack::<&str, N>::new();
-        let mut stored_variables = HashMap::<&str, usize>::with_capacity(self.expression.len() / 2);
-        let mut last_variable_index = 0_usize;
         let string = self.expression;
         for element in &mut self.elements {
             if let ParseElement::Token(token) = element {
@@ -241,7 +235,7 @@ where
                             args: None,
                         })
                     }
-                    TokenKind::Bracket(b) => (),
+                    TokenKind::Bracket(_) | TokenKind::Special(Special::Comma) => (),
                     TokenKind::Special(Special::Namespace) => {
                         namespaces.push(token.slice(string));
                     }
@@ -250,12 +244,7 @@ where
                     }
                     TokenKind::Identifier(Identifier::Variable) => {
                         let identifier = token.slice(string);
-                        let index = *stored_variables.entry(identifier).or_insert_with(|| {
-                            let temp = last_variable_index;
-                            self.variables.push(Value::Int(0));
-                            last_variable_index += 1;
-                            temp
-                        });
+                        let index = self.variables.find_or_set(identifier);
                         *element = ParseElement::Node(Node::Variable { index });
                     }
                 };
@@ -271,26 +260,23 @@ where
                     TokenKind::Identifier(_) => {
                         token.set_kind(TokenKind::Special(Special::Namespace));
                     }
-                    //_ => self.new_token(chr, index)?,
                     _ => return Err(SimdevalError::UnexpectedToken),
                 },
                 b'0'..=b'9' => match token.kind() {
                     TokenKind::Identifier(_) | TokenKind::Literal(_) => token.inc_end(),
-                    //_ => self.new_token(chr, index)?,
                     _ => self.new_token_from_kind(TokenKind::Literal(Literal::Int), index),
                 },
                 b'a'..=b'z' | b'A'..=b'Z' => match token.kind() {
                     TokenKind::Identifier(_) => token.inc_end(),
                     _ => {
                         self.new_token_from_kind(TokenKind::Identifier(Identifier::Variable), index)
-                    } //_ => self.new_token(chr, index)?,
+                    }
                 },
                 b'.' => match token.kind() {
                     TokenKind::Literal(Literal::Int) => {
                         token.set_inc(TokenKind::Literal(Literal::Float))
                     }
                     _ => self.new_token_from_kind(TokenKind::Literal(Literal::Float), index),
-                    //_ => return Err(SimdevalError::UnexpectedToken)
                 },
                 b'+' | b'-' | b'*' | b'/' | b'%' | b'^' | b'&' | b'|' | b'!' | b'=' | b'<'
                 | b'>' | b'#' => match (chr, token.kind()) {
@@ -311,12 +297,11 @@ where
                 b'(' | b')' => match (chr, token.kind()) {
                     (b'(', TokenKind::Identifier(_)) => {
                         token.set_kind(TokenKind::Identifier(Identifier::Function));
-                        //self.new_token(chr, index)?;
                         self.new_token_from_kind(TokenKind::Bracket(Bracket::Opened), index)
                     }
-                    //_ => self.new_token(chr, index)?,
                     _ => self.new_token_from_kind(TokenKind::Bracket(Bracket::Opened), index),
                 },
+                b',' => self.new_token_from_kind(TokenKind::Special(Special::Comma), index),
                 _ => return Err(SimdevalError::UnexpectedToken),
             }
         } else {
@@ -360,7 +345,7 @@ where
                     operator.eval(self.eval_at_recursive(*lhs), self.eval_at_recursive(*rhs))
                 }
                 Node::Literal(value) => *value,
-                Node::Variable { index } => panic!(),
+                Node::Variable { index } => self.variables[*index],
                 Node::Function { function, args } => todo!(),
             }
         } else {
