@@ -1,18 +1,21 @@
 #[cfg(test)]
 extern crate test;
 
-use std::{mem::{align_of, size_of}, collections::BTreeMap};
+use std::{
+    collections::BTreeMap,
+    mem::{align_of, size_of},
+};
 
 use fasteval::Compiler;
 
 use crate::{
     evaluate::{
-        enums::Value,
         expression::Expression,
         function::{std::Std, Function},
         node::Node,
         parse_element::ParseElement,
         token::Token,
+        value::single::Value,
     },
     impl_functions,
 };
@@ -27,17 +30,54 @@ fn test_parse_fast() {
 }
 #[bench]
 fn bench_parse_fast(b: &mut test::Bencher) {
-    let expression = "1/2+1*3^2+45*43231231541.35252";
-    b.iter(|| {
+    let expression = "a+43*3-a+b^3";
+    let mut test = Expression::<Std>::new(expression);
+    b.iter(move || {
         test::black_box({
-            let mut test = Expression::<Std>::new(expression);
             test.compile().unwrap();
+            test.set_expression(expression)
             //.to_nodes()
             //.unwrap()
             //.set_indices()
             //.unwrap();
         })
     });
+}
+
+#[bench]
+fn bench_compile_to_tokens(b: &mut test::Bencher){
+    let expression = "a+43*3-a+b^3";
+    let mut test = Expression::<Std>::new(expression);
+    test.compile().unwrap();
+    b.iter(||{
+        test.to_tokens().unwrap();
+        test.set_expression(expression);
+    })
+}
+
+#[bench]
+fn bench_compile_to_nodes(b: &mut test::Bencher){
+    let expression = "a+43*3-a+b^3";
+    let mut test = Expression::<Std>::new(expression);
+    test.compile().unwrap();
+    b.iter(||{
+        test.to_tokens().unwrap();
+        test.to_nodes::<4, 16>().unwrap();
+        test.set_expression(expression);
+    })
+}
+
+#[bench]
+fn bench_compile_set_indices(b: &mut test::Bencher){
+    let expression = "a+43*3-a+b^3";
+    let mut test = Expression::<Std>::new(expression);
+    test.compile().unwrap();
+    b.iter(||{
+        test.to_tokens().unwrap();
+        test.to_nodes::<4, 16>().unwrap();
+        test.set_indices().unwrap();
+        test.set_expression(expression);
+    })
 }
 
 #[test]
@@ -54,12 +94,13 @@ fn root(value: &[Value; 2]) -> Value {
 fn sqrt(value: &[Value; 1]) -> Value {
     todo!()
 }
-impl_functions!(Foo: foo; [Std: std]; [Root: root, Sqrt: sqrt]);
-impl_functions!(Bar: bar; [Std: std, Foo: foo]; [Root: root, Sqrt: sqrt]);
+impl_functions!(Foo: foo; [Std: std]; [Root: root, 2, Sqrt: sqrt, 1]);
+impl_functions!(Bar: bar; [Std: std, Foo: foo]; [Root: root, 2, Sqrt: sqrt, 1]);
 #[test]
 fn test_eval() {
-    let mut expression = Expression::<Bar>::new("3+1+5");
+    let mut expression = Expression::<Bar>::new("3+1+5+a");
     expression.compile().unwrap();
+    expression.set_variable("a", Value::Int(666)).unwrap();
     println!("expression: {:#?}", expression);
     let result = expression.eval().unwrap();
     println!("result {:#?}", result);
@@ -68,7 +109,7 @@ fn test_eval() {
 fn bench_eval(b: &mut test::Bencher) {
     let mut expression = Expression::<Std>::new("2+6^2*4");
     expression.compile().unwrap();
-    b.iter(||test::black_box(expression.eval()))
+    b.iter(|| test::black_box(expression.eval()))
 }
 
 #[bench]
@@ -76,9 +117,33 @@ fn bench_eval_fasteval(b: &mut test::Bencher) {
     use fasteval::Evaler;
     let parser = fasteval::Parser::new();
     let mut slab = fasteval::Slab::new();
-    let expression = parser.parse("2+6^2*4", &mut slab.ps).unwrap().from(&slab.ps);
+    let expression = parser
+        .parse("2+6^2*4", &mut slab.ps)
+        .unwrap()
+        .from(&slab.ps);
     let compiled = expression.compile(&slab.ps, &mut slab.cs);
     b.iter(|| test::black_box(compiled.eval(&slab, &mut fasteval::evalns::EmptyNamespace)))
+}
+#[bench]
+fn bench_parse_fasteval(b: &mut test::Bencher) {
+    use fasteval::Evaler;
+    let parser = fasteval::Parser::new();
+    let mut slab = fasteval::Slab::new();
+    let expression = parser
+        .parse("2+6^2*4", &mut slab.ps)
+        .unwrap()
+        .from(&slab.ps);
+    let compiled = expression.compile(&slab.ps, &mut slab.cs);
+    b.iter(|| {
+        test::black_box({
+            parser
+                .parse("2+6^2*4", &mut slab.ps)
+                .unwrap()
+                .from(&slab.ps)
+                .compile(&slab.ps, &mut slab.cs)
+                ;
+        })
+    })
 }
 
 #[test]
