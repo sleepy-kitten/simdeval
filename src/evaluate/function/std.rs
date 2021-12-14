@@ -33,10 +33,10 @@ impl Function<Std> for Std {
             })
         }
     }
-    fn call(&self, node: &[Value]) -> Value {
-        match self {
+    fn call(&self, node: &[Value]) -> Result<Value, SimdevalError> {
+        Ok(match self {
             Self::Log => Value::Int(1),
             Self::Sqrt => Value::Int(2),
-        }
+        })
     }
 }
