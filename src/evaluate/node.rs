@@ -27,7 +27,7 @@ impl<'a, T> Node<'a, T>
 where
     T: Function<T>,
 {
-    pub fn weight(&self) -> i16 {
+    pub(crate) fn weight(&self) -> i16 {
         match self {
             Self::Instruction { operator, .. } => operator.weight(),
             _ => 0,
