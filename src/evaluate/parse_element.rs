@@ -19,9 +19,9 @@ where
 
 impl<'a, T> ParseElement<'a, T>
 where
-    T: Function<T> + Clone,
+    T: Function<T> + Clone + Debug,
 {
-    pub fn to_node_clone(
+    pub(crate) fn to_node_clone(
         &mut self,
         namespaces: &mut Iter<&str>,
         string: &str,
@@ -65,7 +65,14 @@ impl<'a, T> ParseElement<'a, T>
 where
     T: Function<T>,
 {
-    pub fn to_node(self, namespaces: &mut Iter<&str>, string: &str) -> Result<Self, SimdevalError> {
+    pub(crate) fn get_operands_indices(&self) -> Option<(usize, usize)> {
+        if let Self::Node( Node::Instruction{lhs, rhs, ..}) = self {
+                Some((*lhs, *rhs))
+        } else {
+            None
+        }
+    }
+    pub(crate) fn to_node(self, namespaces: &mut Iter<&str>, string: &str) -> Result<Self, SimdevalError> {
         if let Self::Token(token) = self {
             Ok(match token.kind() {
                 TokenKind::Literal(Literal::Float) => {
