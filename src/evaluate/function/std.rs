@@ -1,5 +1,5 @@
 
-use crate::{error::SimdevalError, evaluate::{enums::Value, node::Node}};
+use crate::{error::SimdevalError, evaluate::{ node::Node, value::single::Value}};
 
 use super::Function;
 #[derive(Debug, Clone)]

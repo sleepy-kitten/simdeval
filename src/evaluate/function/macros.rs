@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! impl_functions {
-    ($lib_name: ident: $lib_namespace: ident; [$($import: ty: $import_name: ident),*]; [$($func_name: ident: $func: ident),+]) => {
+    ($lib_name: ident: $lib_namespace: ident; [$($import: ty: $import_name: ident),*]; [$($func_name: ident: $func: ident, $arg_count: expr),+]) => {
         #[allow(non_camel_case_types)]
         #[derive(Debug, Clone)]
         enum $lib_name {
@@ -28,9 +28,9 @@ macro_rules! impl_functions {
                     })
                 }
             }
-            fn call(&self, args: &[crate::evaluate::enums::Value]) -> Result<crate::evaluate::enums::Value, crate::error::SimdevalError> {
+            fn call(&self, args: &[crate::evaluate::value::single::Value]) -> Result<crate::evaluate::value::single::Value, crate::error::SimdevalError> {
                 Ok(match self {
-                    $($lib_name::$func_name => $func(args.try_into()?),)+
+                    $($lib_name::$func_name => { if args.len() == $arg_count {$func(args.try_into()?)} else {return Err(crate::error::SimdevalError::InvalidArgs)}},)+
                     $($lib_name::$import_name(i) => i.call(args)?,)+
                 })
             }

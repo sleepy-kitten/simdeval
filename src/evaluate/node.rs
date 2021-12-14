@@ -1,6 +1,6 @@
 use super::{
-    enums::{Operator, Value},
-    function::Function,
+    enums::{Operator},
+    function::Function, value::single::Value,
 };
 
 #[derive(Debug, Clone)]
@@ -33,11 +33,12 @@ where
             _ => 0,
         }
     }
-    pub(crate) fn as_mut_instruction_indices(&mut self) -> Option<(&mut usize, &mut usize)> {
+    #[inline(always)]
+    pub(crate) fn as_mut_instruction_indices(&mut self) -> (&mut usize, &mut usize) {
         if let <Node<T>>::Instruction { operator, lhs, rhs } = self {
-            Some((lhs, rhs))
+            (lhs, rhs)
         } else {
-            None
+            panic!()
         }
     }
 }

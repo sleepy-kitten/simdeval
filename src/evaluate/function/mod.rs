@@ -2,7 +2,8 @@ use ::std::slice::Iter;
 
 use crate::error::SimdevalError;
 
-use super::enums::Value;
+use super::value::single::Value;
+
 
 pub mod std;
 pub mod macros;

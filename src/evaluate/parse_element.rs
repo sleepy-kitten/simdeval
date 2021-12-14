@@ -1,10 +1,10 @@
 use crate::error::SimdevalError;
 
 use super::{
-    enums::{Identifier, Literal, TokenKind, Value},
+    enums::{Identifier, Literal, TokenKind},
     function::Function,
     node::Node,
-    token::Token,
+    token::Token, value::single::Value,
 };
 use std::{fmt::Debug, slice::Iter};
 
