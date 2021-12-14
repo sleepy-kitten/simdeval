@@ -1,4 +1,4 @@
-use std::num::{ParseFloatError, ParseIntError};
+use std::{num::{ParseFloatError, ParseIntError}, array::TryFromSliceError, str::ParseBoolError};
 
 #[derive(Debug)]
 pub enum SimdevalError {
@@ -7,6 +7,8 @@ pub enum SimdevalError {
     NoIdentifierMatch,
     InvalidToken,
     InvalidNamespace,
+    InvalidArgs,
+    InvalidVariable,
 }
 
 impl From<ParseFloatError> for SimdevalError {
@@ -14,9 +16,19 @@ impl From<ParseFloatError> for SimdevalError {
         Self::InvalidToken
     }
 }
-
 impl From<ParseIntError> for SimdevalError {
     fn from(_: ParseIntError) -> Self {
         Self::InvalidToken
+    }
+}
+impl From<ParseBoolError> for SimdevalError {
+    fn from(_: ParseBoolError) -> Self {
+        Self::InvalidToken
+    }
+}
+
+impl From<TryFromSliceError> for SimdevalError {
+    fn from(_: TryFromSliceError) -> Self {
+        Self::InvalidArgs
     }
 }
