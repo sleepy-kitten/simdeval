@@ -2,8 +2,6 @@
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_extra)]
 #![feature(more_qualified_paths)]
-#![feature(const_for)]
-#![feature(const_mut_refs)]
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
