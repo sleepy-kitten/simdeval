@@ -10,6 +10,7 @@ pub enum SimdevalError {
     InvalidArgs,
     InvalidVariable,
     NotCompiled,
+    AlreadyCompiled,
 }
 
 impl From<ParseFloatError> for SimdevalError {
