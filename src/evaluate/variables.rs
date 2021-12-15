@@ -10,21 +10,21 @@ pub(crate) struct Variables<'a> {
     values: Vec<Value>,
 }
 impl<'a> Variables<'a> {
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.identifiers.clear();
         self.values.clear();
     }
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
             identifiers: Vec::with_capacity(capacity),
             values: Vec::with_capacity(capacity),
         }
     }
-    pub fn push(&mut self, identifier: &'a str) {
+    pub(crate) fn push(&mut self, identifier: &'a str) {
         self.identifiers.push(identifier);
         self.values.push(Value::Int(0));
     }
-    pub fn set(&mut self, identifier: &'a str, value: Value) -> Result<(), SimdevalError> {
+    pub(crate) fn set(&mut self, identifier: &'a str, value: Value) -> Result<(), SimdevalError> {
         let index = self
             .identifiers
             .binary_search(&identifier)
@@ -32,7 +32,14 @@ impl<'a> Variables<'a> {
         self.values[index] = value;
         Ok(())
     }
-    pub fn find_or_set(&mut self, identifier: &'a str) -> usize {
+    pub(crate) fn set_by_index(&mut self, index: usize, value: Value) -> Result<(), SimdevalError> {
+        *self
+            .values
+            .get_mut(index)
+            .ok_or(SimdevalError::InvalidVariable)? = value;
+        Ok(())
+    }
+    pub(crate) fn find_or_set(&mut self, identifier: &'a str) -> usize {
         if let Ok(i) = self.identifiers.binary_search(&identifier) {
             i
         } else {
@@ -40,6 +47,9 @@ impl<'a> Variables<'a> {
             self.values.push(Value::Int(0));
             self.identifiers.len() - 1
         }
+    }
+    pub(crate) fn identifiers(&self) -> &[&str] {
+        &self.identifiers
     }
 }
 

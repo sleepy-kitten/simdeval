@@ -162,12 +162,27 @@ fn test_handle_thing() {
 #[test]
 fn test_full() {
     let start = Instant::now();
-    let mut test = Expression::<Std>::new("a+b+2");
     for i in 0..=1000000 {
+        let mut test = Expression::<Std>::new("a+b+2");
         test.set_expression("3+1+5+3");
         let _ = test.compile();
         let _ = test.eval();
     }
     let end = start.elapsed();
     println!("{}ms", end.as_millis());
+}
+
+#[test]
+fn test_simd() {
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "avx2"
+    ))]
+    println!("avx2");
+
+    #[cfg(not(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "avx2"
+    )))]
+    println!("not");
 }

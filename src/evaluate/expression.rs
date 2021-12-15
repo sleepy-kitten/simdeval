@@ -141,10 +141,12 @@ where
         self.variables.clear();
         self.top_node = None
     }
+    /// set a new expression
     pub fn set_expression(&mut self, expression: &'a str) {
         self.clear();
         self.expression = expression;
     }
+    /// compiles the expression into a usable form
     #[inline]
     pub fn compile(&mut self) -> Result<(), SimdevalError> {
         if self.top_node.is_none() {
@@ -153,13 +155,21 @@ where
             Err(SimdevalError::AlreadyCompiled)
         }
     }
-    pub fn optimize(&mut self) {}
+
+    pub fn optimize(&mut self) {
+
+    }
     fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
         let token = Token::new(token_kind, start);
         self.elements.push(ParseElement::Token(token));
     }
+
     pub fn set_variable(&mut self, identifier: &'a str, value: Value) -> Result<(), SimdevalError> {
         self.variables.set(identifier, value)
+    }
+
+    pub fn set_variable_by_index(&mut self, index: usize, value: Value) -> Result<(), SimdevalError> {
+        self.variables.set_by_index(index, value)
     }
     fn new_token(&mut self, chr: u8, start: usize) -> Result<(), SimdevalError> {
         let token_kind = match chr {
