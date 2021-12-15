@@ -4,6 +4,7 @@ extern crate test;
 use std::{
     collections::BTreeMap,
     mem::{align_of, size_of},
+    time::Instant,
 };
 
 use fasteval::Compiler;
@@ -45,22 +46,22 @@ fn bench_parse_fast(b: &mut test::Bencher) {
 }
 
 #[bench]
-fn bench_compile_to_tokens(b: &mut test::Bencher){
+fn bench_compile_to_tokens(b: &mut test::Bencher) {
     let expression = "a+43*3-a+b^3";
     let mut test = Expression::<Std>::new(expression);
     test.compile().unwrap();
-    b.iter(||{
+    b.iter(|| {
         test.to_tokens().unwrap();
         test.set_expression(expression);
     })
 }
 
 #[bench]
-fn bench_compile_to_nodes(b: &mut test::Bencher){
+fn bench_compile_to_nodes(b: &mut test::Bencher) {
     let expression = "a+43*3-a+b^3";
     let mut test = Expression::<Std>::new(expression);
     test.compile().unwrap();
-    b.iter(||{
+    b.iter(|| {
         test.to_tokens().unwrap();
         test.to_nodes::<4, 16>().unwrap();
         test.set_expression(expression);
@@ -68,11 +69,11 @@ fn bench_compile_to_nodes(b: &mut test::Bencher){
 }
 
 #[bench]
-fn bench_compile_set_indices(b: &mut test::Bencher){
+fn bench_compile_set_indices(b: &mut test::Bencher) {
     let expression = "a+43*3-a+b^3";
     let mut test = Expression::<Std>::new(expression);
     test.compile().unwrap();
-    b.iter(||{
+    b.iter(|| {
         test.to_tokens().unwrap();
         test.to_nodes::<4, 16>().unwrap();
         test.set_indices().unwrap();
@@ -104,6 +105,12 @@ fn test_eval() {
     println!("expression: {:#?}", expression);
     let result = expression.eval().unwrap();
     println!("result {:#?}", result);
+    let start = Instant::now();
+    for i in 0..=1000000 {
+        let _ = expression.eval();
+    }
+    let end = start.elapsed();
+    println!("{}ms", end.as_millis());
 }
 #[bench]
 fn bench_eval(b: &mut test::Bencher) {
@@ -140,8 +147,7 @@ fn bench_parse_fasteval(b: &mut test::Bencher) {
                 .parse("2+6^2*4", &mut slab.ps)
                 .unwrap()
                 .from(&slab.ps)
-                .compile(&slab.ps, &mut slab.cs)
-                ;
+                .compile(&slab.ps, &mut slab.cs);
         })
     })
 }
@@ -151,4 +157,17 @@ fn test_handle_thing() {
     let mut test = Expression::<Std>::new("a+b+2");
     let _ = test.compile();
     let elements = test.elements();
+}
+
+#[test]
+fn test_full() {
+    let start = Instant::now();
+    let mut test = Expression::<Std>::new("a+b+2");
+    for i in 0..=1000000 {
+        test.set_expression("3+1+5+3");
+        let _ = test.compile();
+        let _ = test.eval();
+    }
+    let end = start.elapsed();
+    println!("{}ms", end.as_millis());
 }
