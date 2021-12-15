@@ -24,7 +24,7 @@ where
     elements: Vec<ParseElement<'a, T>>,
     variables: Variables<'a>,
     expression: &'a str,
-    top_node: usize,
+    top_node: Option<usize>,
 }
 
 impl<'a, 'b, T: Function<T>> Expression<'a, T> {
@@ -115,7 +115,7 @@ impl<'a, 'b, T: Function<T>> Expression<'a, T> {
                 break;
             }
         }
-        self.top_node = highest_weight.index;
+        self.top_node = Some(highest_weight.index);
         Ok(())
     }
     /// Get a reference to the expression's elements.
@@ -127,18 +127,19 @@ impl<'a, T: Function<T>> Expression<'a, T>
 where
     T: Function<T> + Clone + Debug,
 {
-    #[inline]
+    /// creates a new `Expression` from a string
     pub fn new(expression: &'a str) -> Self {
         Self {
             elements: Vec::with_capacity(expression.len()),
             variables: Variables::with_capacity(expression.len() / 2),
             expression,
-            top_node: 0,
+            top_node: None,
         }
     }
-    pub fn clear(&mut self) {
+    fn clear(&mut self) {
         self.elements.clear();
-        self.variables.clear()
+        self.variables.clear();
+        self.top_node = None
     }
     pub fn set_expression(&mut self, expression: &'a str) {
         self.clear();
@@ -320,23 +321,14 @@ where
     T: Function<T> + Clone + Debug,
 {
     pub fn eval(&mut self) -> Result<Value, SimdevalError> {
-        /*
-        let mut current = self.top_node;
-        loop {
-            if let ParseElement::Token(_) = self.elements[current] {
-                panic!("referenced node was a token")
-            }
-            let children = self.get_operands(current);
-            if let Some(children) = children {
-                let current = children.0;
-                self.eval_stack.push(children.1);
-            }
-        }
-        */
-        Ok(self.eval_recursive())
+        self.eval_recursive()
     }
-    fn eval_recursive(&self) -> Value {
-        self.eval_at_recursive(self.top_node)
+    fn eval_recursive(&self) -> Result<Value, SimdevalError> {
+        if let Some(top_node) = self.top_node {
+            Ok(self.eval_at_recursive(top_node))
+        } else {
+            Err(SimdevalError::NotCompiled)
+        }
     }
     fn eval_at_recursive(&self, index: usize) -> Value {
         if let ParseElement::Node(n) = &self.elements[index] {

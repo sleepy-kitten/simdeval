@@ -9,6 +9,7 @@ pub enum SimdevalError {
     InvalidNamespace,
     InvalidArgs,
     InvalidVariable,
+    NotCompiled,
 }
 
 impl From<ParseFloatError> for SimdevalError {
