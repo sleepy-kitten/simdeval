@@ -147,7 +147,11 @@ where
     }
     #[inline]
     pub fn compile(&mut self) -> Result<(), SimdevalError> {
-        self.to_tokens()?.to_nodes::<4, 16>()?.set_indices()
+        if self.top_node.is_none() {
+            self.to_tokens()?.to_nodes::<4, 16>()?.set_indices()
+        } else {
+            Err(SimdevalError::AlreadyCompiled)
+        }
     }
     pub fn optimize(&mut self) {}
     fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
