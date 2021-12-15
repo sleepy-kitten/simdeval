@@ -19,5 +19,5 @@ lto = true
 [profile.test]
 opt-level = 3
 
-# lto = true
+lto = true
 # codegen-units = 1
