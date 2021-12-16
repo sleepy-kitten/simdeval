@@ -24,9 +24,11 @@ use crate::{
 
 #[test]
 fn test_parse_fast() {
-    let expression = "sqrt(1+1)";
+    let expression = "2+6^2*4";
     let mut expression = Expression::<Std>::new(expression);
     expression.compile().unwrap();
+    expression.optimize().unwrap();
+
     //let temp = expression;
     println!("compiled: {:#?}", expression);
 }
@@ -87,36 +89,23 @@ fn test_fast_sizes() {
     println!("element:   {}", size_of::<ParseElement<Std>>());
     println!("node:      {}", size_of::<Node<Std>>());
     println!("token:     {}", size_of::<Token>());
-    println!();
-    println!("element:   {}", align_of::<ParseElement<Std>>());
+
 }
-fn root(value: &[Value; 2]) -> Value {
-    todo!()
-}
-fn sqrt(value: &[Value; 1]) -> Value {
-    todo!()
-}
-impl_functions!(Foo: foo; []; [Root: root, 2]);
-impl_functions!(Bar: bar; [Std: std, Foo: foo]; [Root: root, 2, Sqrt: sqrt, 1]);
-impl_functions_test!(
-    Baz: baz;
-    [Std: std];
-    [test(2) {
-        Value::Int(0);
-        Value::Int(9)
-    }]
-);
+
 #[test]
 fn test_macro() {
-    let mut expression = Expression::<Baz>::new("baz:test(3+1+5+a)");
+    let mut expression = Expression::<Std>::new("std:sqrt(3+1+5+a)");
     expression.compile().unwrap();
     expression.set_variable("a", Value::Int(666)).unwrap();
-    println!("{}", Baz::MAX_ARGS)
+    println!("{}", Std::MAX_ARGS);
+    let test = Std::Sqrt;
+    println!("{}", test.is_const());
 }
 #[test]
 fn test_eval() {
     let mut expression = Expression::<Std>::new("sqrt(4)");
     expression.compile().unwrap();
+    expression.optimize().unwrap();
     //expression.set_variable("a", Value::Int(666)).unwrap();
     println!("expression: {:#?}", expression);
     let result = expression.eval().unwrap();
@@ -130,8 +119,9 @@ fn test_eval() {
 }
 #[bench]
 fn bench_eval(b: &mut test::Bencher) {
-    let mut expression = Expression::<Std>::new("2+6^2*4");
+    let mut expression = Expression::<Std>::new("2+6^a*4");
     expression.compile().unwrap();
+    expression.optimize().unwrap();
     b.iter(|| test::black_box(expression.eval()))
 }
 
@@ -141,10 +131,11 @@ fn bench_eval_fasteval(b: &mut test::Bencher) {
     let parser = fasteval::Parser::new();
     let mut slab = fasteval::Slab::new();
     let expression = parser
-        .parse("2+6^2*4", &mut slab.ps)
+        .parse("2+6^a*4", &mut slab.ps)
         .unwrap()
         .from(&slab.ps);
     let compiled = expression.compile(&slab.ps, &mut slab.cs);
+    println!("{:#?}", compiled);
     b.iter(|| test::black_box(compiled.eval(&slab, &mut fasteval::evalns::EmptyNamespace)))
 }
 #[bench]
@@ -181,8 +172,9 @@ fn test_full_speed() {
     for i in 0..=1000000 {
         let mut test = Expression::<Std>::new("a+b+2");
         test.set_expression("3+1+5+3");
-        let _ = test.compile();
-        let _ = test.eval();
+        test.compile().unwrap();
+        test.optimize().unwrap();
+        test.eval().unwrap();
     }
     let end = start.elapsed();
     println!("{}ms", end.as_millis());
