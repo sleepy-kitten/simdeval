@@ -35,6 +35,7 @@ where
 
 impl<'a, 'b, T: Function<T>> Expression<'a, T>
 where
+    T: Clone + Debug,
     [(); T::MAX_ARGS]:,
 {
     pub(crate) fn to_tokens(&mut self) -> Result<&mut Self, SimdevalError> {
@@ -264,7 +265,7 @@ where
 }
 impl<'a, T: Function<T>> Expression<'a, T>
 where
-    T: Function<T>,
+    T: Function<T> + Clone + Debug,
     [(); T::MAX_ARGS]:,
 {
     /// creates a new `Expression` from a string
@@ -303,7 +304,51 @@ where
         }
     }
 
-    pub fn optimize(&mut self) {}
+    pub fn optimize(&mut self) -> Result<(), SimdevalError> {
+        if let Some(top_node) = self.top_node {
+            self.optimize_recursive(top_node)?;
+            Ok(())
+        } else {
+            Err(SimdevalError::NotCompiled)
+        }
+    }
+    fn optimize_recursive(&mut self, index: usize) -> Result<Option<Value>, SimdevalError> {
+        if let ParseElement::Node(node) = &self.elements[index] {
+            match node {
+                Node::Instruction { operator, lhs, rhs } => {
+                    let operator = *operator;
+                    let rhs = *rhs;
+                    let lhs = *lhs;
+                    if let (Ok(Some(lhs)), Ok(Some(rhs))) =
+                        (self.optimize_recursive(lhs), self.optimize_recursive(rhs))
+                    {
+                        let value = operator.eval(lhs, rhs);
+                        self.elements[index] = ParseElement::Node(Node::Literal(value));
+                        Ok(Some(value))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                Node::Literal(value) => Ok(Some(*value)),
+                Node::Function { function, args } => {
+                    let mut args_eval = Stack::<Value, {T::MAX_ARGS}>::new();
+                    for arg in args.iter() {
+                        args_eval.push(self.eval_recursive(*arg)?);
+                    }
+                    if function.is_const() {
+                        let value = function.call(args_eval.slice())?;
+                        self.elements[index] = ParseElement::Node(Node::Literal(value));
+                        Ok(Some(value))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                Node::Variable { .. } => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
+    }
     fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
         let token = Token::new(token_kind, start);
         self.elements.push(ParseElement::Token(token));
@@ -434,34 +479,32 @@ where
     T: Function<T> + Clone + Debug,
     [(); T::MAX_ARGS]:,
 {
-    pub fn eval(&mut self) -> Result<Value, SimdevalError> {
-        self.eval_recursive()
-    }
-    fn eval_recursive(&self) -> Result<Value, SimdevalError> {
+    #[inline]
+    pub fn eval(&self) -> Result<Value, SimdevalError> {
         if let Some(top_node) = self.top_node {
-            self.eval_at_recursive(top_node)
+            self.eval_recursive(top_node)
         } else {
             Err(SimdevalError::NotCompiled)
         }
     }
-    fn eval_at_recursive(&self, index: usize) -> Result<Value, SimdevalError> {
+    fn eval_recursive(&self, index: usize) -> Result<Value, SimdevalError> {
         if let ParseElement::Node(n) = &self.elements[index] {
             Ok(match n {
                 Node::Instruction { operator, lhs, rhs } => {
-                    operator.eval(self.eval_at_recursive(*lhs)?, self.eval_at_recursive(*rhs)?)
+                    operator.eval(self.eval_recursive(*lhs)?, self.eval_recursive(*rhs)?)
                 }
                 Node::Literal(value) => *value,
                 Node::Variable { index } => self.variables[*index],
                 Node::Function { function, args } => {
                     let mut args_eval = Stack::<Value, { T::MAX_ARGS }>::new();
                     for arg in args.iter() {
-                        args_eval.push(self.eval_at_recursive(*arg)?);
+                        args_eval.push(self.eval_recursive(*arg)?);
                     }
                     function.call(args_eval.slice())?
                 }
             })
         } else {
-            panic!()
+            Err(SimdevalError::InvalidIndex)
         }
     }
     fn get_operands(&self, index: usize) -> Option<(usize, usize)> {
