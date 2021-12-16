@@ -1,7 +1,20 @@
 
-use crate::{error::SimdevalError, evaluate::{ node::Node, value::single::Value}};
+use crate::{error::SimdevalError, evaluate::{ node::Node, value::single::Value}, impl_functions};
 
 use super::Function;
+
+fn sqrt(values: [Value; 1]) -> Value {
+    Value::Float(match values {
+        [Value::Int(v)] => (v as f64).sqrt(),
+        [Value::Float(v)] => v.sqrt(),
+        [Value::Bool(v)] => v as i64 as f64
+    })
+}
+
+impl_functions!(Std: std; []; [Sqrt: sqrt, 1]);
+
+
+/*
 #[derive(Debug, Clone)]
 pub(crate) enum Std {
     Sqrt,
@@ -40,3 +53,4 @@ impl Function<Std> for Std {
         })
     }
 }
+*/

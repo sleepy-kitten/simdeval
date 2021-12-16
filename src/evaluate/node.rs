@@ -1,13 +1,12 @@
-use super::{
-    enums::{Operator},
-    function::Function, value::single::Value,
-};
+use crate::stack::Stack;
 
-#[derive(Debug, Clone)]
+use super::{enums::Operator, function::Function, value::single::Value};
+
+#[derive(Debug)]
 pub(crate) enum Node<T>
 where
     T: Function<T>,
-    [(); T::MAX_ARGS]:
+    [(); T::MAX_ARGS]:,
 {
     Instruction {
         operator: Operator,
@@ -20,14 +19,14 @@ where
     },
     Function {
         function: T,
-        args: Option<[usize; T::MAX_ARGS]>,
+        args: Stack<usize, { T::MAX_ARGS }>,
     },
 }
 
 impl<'a, T> Node<T>
 where
     T: Function<T>,
-    [(); T::MAX_ARGS]:
+    [(); T::MAX_ARGS]:,
 {
     pub(crate) fn weight(&self) -> i16 {
         match self {

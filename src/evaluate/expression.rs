@@ -11,6 +11,11 @@ use super::{
 };
 use std::{cmp::Ordering, collections::HashMap, fmt::Debug};
 
+struct IndexedWeight {
+    weight: i16,
+    index: usize,
+}
+
 #[derive(Debug)]
 
 /// An `Expression` contains the expression string and the compiled version of that expression.
@@ -20,7 +25,7 @@ use std::{cmp::Ordering, collections::HashMap, fmt::Debug};
 pub(crate) struct Expression<'a, T>
 where
     T: Function<T>,
-    [(); T::MAX_ARGS]:
+    [(); T::MAX_ARGS]:,
 {
     elements: Vec<ParseElement<T>>,
     variables: Variables<'a>,
@@ -32,23 +37,73 @@ impl<'a, 'b, T: Function<T>> Expression<'a, T>
 where
     [(); T::MAX_ARGS]:,
 {
-    pub(crate) fn set_indices(&'b mut self) -> Result<(), SimdevalError> {
-        struct HighestWeight {
-            weight: i16,
-            index: usize,
+    pub(crate) fn to_tokens(&mut self) -> Result<&mut Self, SimdevalError> {
+        for (index, &chr) in self.expression.as_bytes().iter().enumerate() {
+            self.push(chr, index)?;
         }
+        Ok(self)
+    }
+    pub(crate) fn to_nodes<const N: usize>(&mut self) -> Result<&mut Self, SimdevalError> {
+        let mut namespaces = Stack::<&str, N>::new();
+        let string = self.expression;
+        for element in &mut self.elements {
+            if let ParseElement::Token(token) = element {
+                match token.kind() {
+                    TokenKind::Literal(l) => {
+                        let value = match l {
+                            Literal::Bool => Value::Bool(token.slice(string).parse::<bool>()?),
+                            Literal::Float => Value::Float(token.slice(string).parse::<f64>()?),
+                            Literal::Int => Value::Int(token.slice(string).parse::<i64>()?),
+                        };
+                        *element = ParseElement::Node(Node::Literal(value));
+                    }
+                    TokenKind::Operator(o) => {
+                        *element = ParseElement::Node(Node::Instruction {
+                            operator: o,
+                            lhs: 0,
+                            rhs: 0,
+                        })
+                    }
+                    TokenKind::Identifier(Identifier::Function) => {
+                        let identifier = token.slice(string);
+                        let mut namespaces = namespaces.iter();
+                        let function =
+                            <T as Function<T>>::from_string(&mut namespaces, identifier)?;
+                        *element = ParseElement::Node(Node::Function {
+                            function,
+                            args: Stack::new(),
+                        })
+                    }
+                    TokenKind::Bracket(_) | TokenKind::Special(Special::Comma) => (),
+                    TokenKind::Special(Special::Namespace) => {
+                        namespaces.push(token.slice(string));
+                    }
+                    TokenKind::Special(Special::NegZero) => {
+                        *element = ParseElement::Node(Node::Literal(Value::Int(0)));
+                    }
+                    TokenKind::Identifier(Identifier::Variable) => {
+                        let identifier = token.slice(string);
+                        let index = self.variables.find_or_set(identifier);
+                        *element = ParseElement::Node(Node::Variable { index });
+                    }
+                };
+            }
+        }
+        Ok(self)
+    }
+    pub(crate) fn set_indices(&'b mut self) -> Result<&mut Self, SimdevalError> {
         struct NodeInfo<'b, T>
         where
             T: Function<T>,
-            [(); T::MAX_ARGS]:
+            [(); T::MAX_ARGS]:,
         {
             index: usize,
             node: &'b mut Node<T>,
             weight: i16,
         }
         let mut bracket_weight = 0;
-        let mut highest_weight = HighestWeight {
-            weight: 0,
+        let mut lowest_weight = IndexedWeight {
+            weight: i16::MAX,
             index: 0,
         };
         let mut iter = self
@@ -72,6 +127,14 @@ where
                         };
                         Some(info)
                     }
+                    <Node<T>>::Function { function, args } => {
+                        let info = NodeInfo::<'b, T> {
+                            index,
+                            node,
+                            weight: bracket_weight,
+                        };
+                        Some(info)
+                    }
                     _ => None,
                 },
                 ParseElement::Token(t) => match t.kind() {
@@ -92,27 +155,33 @@ where
 
                 match ord {
                     Ordering::Equal => {
-                        let (lhs, _) = next.node.as_mut_instruction_indices();
-                        *lhs = curr.index;
-                        if highest_weight.weight <= curr.weight {
-                            highest_weight.weight = curr.weight;
-                            highest_weight.index = curr.index;
+                        if let Node::Instruction { lhs, .. } = next.node {
+                            *lhs = curr.index;
+                        } else {
+                        }
+                        if lowest_weight.weight >= next.weight {
+                            lowest_weight.weight = next.weight;
+                            lowest_weight.index = next.index;
                         }
                     }
                     Ordering::Greater => {
-                        let (lhs, _) = next.node.as_mut_instruction_indices();
-                        *lhs = curr.index;
-                        if highest_weight.weight <= curr.weight {
-                            highest_weight.weight = curr.weight;
-                            highest_weight.index = curr.index;
+                        if let Node::Instruction { lhs, .. } = next.node {
+                            *lhs = curr.index;
+                        } else {
+                        }
+                        if lowest_weight.weight >= next.weight {
+                            lowest_weight.weight = next.weight;
+                            lowest_weight.index = next.index;
                         }
                     }
                     Ordering::Less => {
-                        let (_, rhs) = curr.node.as_mut_instruction_indices();
-                        *rhs = next.index;
-                        if highest_weight.weight <= next.weight {
-                            highest_weight.weight = next.weight;
-                            highest_weight.index = next.index;
+                        if let Node::Instruction { rhs, .. } = curr.node {
+                            *rhs = next.index;
+                        } else {
+                        }
+                        if lowest_weight.weight >= curr.weight {
+                            lowest_weight.weight = curr.weight;
+                            lowest_weight.index = curr.index;
                         }
                     }
                 }
@@ -120,19 +189,83 @@ where
                 break;
             }
         }
-        self.top_node = Some(highest_weight.index);
-        Ok(())
+        self.top_node = Some(lowest_weight.index);
+        Ok(self)
     }
-    /// Get a reference to the expression's elements.
-    pub(crate) fn elements(&self) -> &[ParseElement<T>] {
-        self.elements.as_ref()
+    pub(crate) fn set_function_args(&mut self) -> Result<(), SimdevalError> {
+        let mut index = 0;
+        while index < self.elements.len() {
+            let element = &self.elements[index];
+            // skip until element is a function
+            if let ParseElement::Node(Node::Function { .. }) = element {
+                let mut lowest_weight = IndexedWeight {
+                    weight: i16::MAX,
+                    index: 0,
+                };
+                let function_index = index;
+                while index < self.elements.len() {
+                    let element = &self.elements[index];
+                    match element {
+                        ParseElement::Node(
+                            Node::Literal(_) | Node::Variable { .. } | Node::Function { .. },
+                        ) if lowest_weight.weight == i16::MAX
+                            && match &self.elements[index + 1] {
+                                ParseElement::Token(token) => match token.kind() {
+                                    TokenKind::Bracket(Bracket::Closed) => true,
+                                    TokenKind::Special(Special::Comma) => true,
+                                    _ => false,
+                                },
+                                _ => false,
+                            } =>
+                        {
+                            if let ParseElement::Node(Node::Function { args, .. }) =
+                                &mut self.elements[function_index]
+                            {
+                                lowest_weight.index = index;
+                            }
+                        }
+                        // if element is instruction update weight and index
+                        ParseElement::Node(Node::Instruction { operator, .. }) => {
+                            if lowest_weight.weight >= operator.weight() {
+                                lowest_weight.weight = operator.weight();
+                                lowest_weight.index = index;
+                            }
+                        }
+                        ParseElement::Token(token) => match token.kind() {
+                            // if element is comma add last lowest index to args and reset weight
+                            TokenKind::Special(Special::Comma) => {
+                                if let ParseElement::Node(Node::Function { args, .. }) =
+                                    &mut self.elements[function_index]
+                                {
+                                    args.push(lowest_weight.index);
+                                    lowest_weight.weight = i16::MAX;
+                                }
+                            }
+                            // if element is bracket add last lowest index to args and break
+                            TokenKind::Bracket(Bracket::Closed) => {
+                                if let ParseElement::Node(Node::Function { args, .. }) =
+                                    &mut self.elements[function_index]
+                                {
+                                    args.push(lowest_weight.index);
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => (),
+                    }
+                    index += 1;
+                }
+            }
+            index += 1;
+        }
+        Ok(())
     }
 }
 impl<'a, T: Function<T>> Expression<'a, T>
 where
-    T: Function<T> + Clone + Debug,
-    [(); T::MAX_ARGS]:
-    
+    T: Function<T>,
+    [(); T::MAX_ARGS]:,
 {
     /// creates a new `Expression` from a string
     pub fn new(expression: &'a str) -> Self {
@@ -142,6 +275,10 @@ where
             expression,
             top_node: None,
         }
+    }
+    /// Get a reference to the expression's elements.
+    pub(crate) fn elements(&self) -> &[ParseElement<T>] {
+        self.elements.as_ref()
     }
     fn clear(&mut self) {
         self.elements.clear();
@@ -157,7 +294,10 @@ where
     #[inline]
     pub fn compile(&mut self) -> Result<(), SimdevalError> {
         if self.top_node.is_none() {
-            self.to_tokens()?.to_nodes::<4>()?.set_indices()
+            self.to_tokens()?
+                .to_nodes::<4>()?
+                .set_indices()?
+                .set_function_args()
         } else {
             Err(SimdevalError::AlreadyCompiled)
         }
@@ -220,62 +360,6 @@ where
             index,
         )))
     }
-    pub(crate) fn to_tokens(&mut self) -> Result<&mut Self, SimdevalError> {
-        for (index, &chr) in self.expression.as_bytes().iter().enumerate() {
-            self.push(chr, index)?;
-        }
-        Ok(self)
-    }
-    pub(crate) fn to_nodes<const N: usize>(
-        &mut self,
-    ) -> Result<&mut Self, SimdevalError> {
-        let mut namespaces = Stack::<&str, N>::new();
-        let string = self.expression;
-        for element in &mut self.elements {
-            if let ParseElement::Token(token) = element {
-                match token.kind() {
-                    TokenKind::Literal(l) => {
-                        let value = match l {
-                            Literal::Bool => Value::Bool(token.slice(string).parse::<bool>()?),
-                            Literal::Float => Value::Float(token.slice(string).parse::<f64>()?),
-                            Literal::Int => Value::Int(token.slice(string).parse::<i64>()?),
-                        };
-                        *element = ParseElement::Node(Node::Literal(value));
-                    }
-                    TokenKind::Operator(o) => {
-                        *element = ParseElement::Node(Node::Instruction {
-                            operator: o,
-                            lhs: 0,
-                            rhs: 0,
-                        })
-                    }
-                    TokenKind::Identifier(Identifier::Function) => {
-                        let identifier = token.slice(string);
-                        let mut namespaces = namespaces.iter();
-                        let function =
-                            <T as Function<T>>::from_string(&mut namespaces, identifier)?;
-                        *element = ParseElement::Node(Node::Function {
-                            function,
-                            args: None,
-                        })
-                    }
-                    TokenKind::Bracket(_) | TokenKind::Special(Special::Comma) => (),
-                    TokenKind::Special(Special::Namespace) => {
-                        namespaces.push(token.slice(string));
-                    }
-                    TokenKind::Special(Special::NegZero) => {
-                        *element = ParseElement::Node(Node::Literal(Value::Int(0)));
-                    }
-                    TokenKind::Identifier(Identifier::Variable) => {
-                        let identifier = token.slice(string);
-                        let index = self.variables.find_or_set(identifier);
-                        *element = ParseElement::Node(Node::Variable { index });
-                    }
-                };
-            }
-        }
-        Ok(self)
-    }
     fn push(&mut self, chr: u8, index: usize) -> Result<(), SimdevalError> {
         if let Some(ParseElement::Token(token)) = self.elements.last_mut() {
             match chr {
@@ -323,7 +407,13 @@ where
                         token.set_kind(TokenKind::Identifier(Identifier::Function));
                         self.new_token_from_kind(TokenKind::Bracket(Bracket::Opened), index)
                     }
-                    _ => self.new_token_from_kind(TokenKind::Bracket(Bracket::Opened), index),
+                    (b'(', _) => {
+                        self.new_token_from_kind(TokenKind::Bracket(Bracket::Opened), index)
+                    }
+                    (b')', _) => {
+                        self.new_token_from_kind(TokenKind::Bracket(Bracket::Closed), index)
+                    }
+                    _ => unreachable!(),
                 },
                 b',' => self.new_token_from_kind(TokenKind::Special(Special::Comma), index),
                 _ => return Err(SimdevalError::UnexpectedToken),
@@ -342,28 +432,34 @@ where
 impl<'a, T: Function<T>> Expression<'a, T>
 where
     T: Function<T> + Clone + Debug,
-    [(); T::MAX_ARGS]:
+    [(); T::MAX_ARGS]:,
 {
     pub fn eval(&mut self) -> Result<Value, SimdevalError> {
         self.eval_recursive()
     }
     fn eval_recursive(&self) -> Result<Value, SimdevalError> {
         if let Some(top_node) = self.top_node {
-            Ok(self.eval_at_recursive(top_node))
+            self.eval_at_recursive(top_node)
         } else {
             Err(SimdevalError::NotCompiled)
         }
     }
-    fn eval_at_recursive(&self, index: usize) -> Value {
+    fn eval_at_recursive(&self, index: usize) -> Result<Value, SimdevalError> {
         if let ParseElement::Node(n) = &self.elements[index] {
-            match n {
+            Ok(match n {
                 Node::Instruction { operator, lhs, rhs } => {
-                    operator.eval(self.eval_at_recursive(*lhs), self.eval_at_recursive(*rhs))
+                    operator.eval(self.eval_at_recursive(*lhs)?, self.eval_at_recursive(*rhs)?)
                 }
                 Node::Literal(value) => *value,
                 Node::Variable { index } => self.variables[*index],
-                Node::Function { function, args } => todo!(),
-            }
+                Node::Function { function, args } => {
+                    let mut args_eval = Stack::<Value, { T::MAX_ARGS }>::new();
+                    for arg in args.iter() {
+                        args_eval.push(self.eval_at_recursive(*arg)?);
+                    }
+                    function.call(args_eval.slice())?
+                }
+            })
         } else {
             panic!()
         }

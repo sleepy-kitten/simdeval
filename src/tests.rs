@@ -24,7 +24,7 @@ use crate::{
 
 #[test]
 fn test_parse_fast() {
-    let expression = "a+43*3-a+b^3";
+    let expression = "sqrt(1+1)";
     let mut expression = Expression::<Std>::new(expression);
     expression.compile().unwrap();
     //let temp = expression;
@@ -96,7 +96,7 @@ fn root(value: &[Value; 2]) -> Value {
 fn sqrt(value: &[Value; 1]) -> Value {
     todo!()
 }
-impl_functions!(Foo: foo; [Std: std]; [Root: root, 2, Sqrt: sqrt, 1]);
+impl_functions!(Foo: foo; []; [Root: root, 2]);
 impl_functions!(Bar: bar; [Std: std, Foo: foo]; [Root: root, 2, Sqrt: sqrt, 1]);
 impl_functions_test!(
     Baz: baz;
@@ -115,9 +115,9 @@ fn test_macro() {
 }
 #[test]
 fn test_eval() {
-    let mut expression = Expression::<Bar>::new("3+1+5+a");
+    let mut expression = Expression::<Std>::new("sqrt(4)");
     expression.compile().unwrap();
-    expression.set_variable("a", Value::Int(666)).unwrap();
+    //expression.set_variable("a", Value::Int(666)).unwrap();
     println!("expression: {:#?}", expression);
     let result = expression.eval().unwrap();
     println!("result {:#?}", result);
@@ -176,7 +176,7 @@ fn test_handle_thing() {
 }
 
 #[test]
-fn test_full() {
+fn test_full_speed() {
     let start = Instant::now();
     for i in 0..=1000000 {
         let mut test = Expression::<Std>::new("a+b+2");

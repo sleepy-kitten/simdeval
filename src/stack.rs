@@ -1,4 +1,4 @@
-use std::{mem::MaybeUninit, slice::Iter};
+use std::{fmt::Debug, mem::MaybeUninit, slice::Iter};
 
 // I have no clue if any of this code causes UB I just hope it doesn't
 
@@ -70,5 +70,20 @@ where
     /// returns an iter over the elements of the stack
     pub fn iter(&self) -> Iter<T> {
         unsafe { MaybeUninit::slice_assume_init_ref(&self.array[0..self.index]) }.iter()
+    }
+    pub fn slice(&self) -> &[T] {
+        unsafe { MaybeUninit::slice_assume_init_ref(&self.array[0..self.index]) }
+    }
+}
+
+impl<T, const N: usize> Debug for Stack<T, N>
+where
+    T: Copy + Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Stack")
+            .field("array", &self.slice())
+            .field("index", &self.index)
+            .finish()
     }
 }
