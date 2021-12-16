@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! impl_functions {
-    ($lib: ident: $lib_namespace: ident; [$($import: ty: $import_namespace: ident),*]; [$($func_name: ident: $func: ident, $arg_count: expr),+]) => {
+    ($lib: ident: $lib_namespace: ident; [$($import: ty: $import_namespace: ident),*]; [$($func_name: ident: $func: ident($arg_count: expr) $(;$is_const: expr)?),+]) => {
         #[allow(non_camel_case_types)]
         #[derive(Debug, Clone)]
         pub enum $lib {
@@ -34,7 +34,10 @@ macro_rules! impl_functions {
                 })
             }
             fn is_const(&self) -> bool {
-                true
+                match self {
+                    $($lib::$import_namespace(i) => i.is_const(),)*
+                    $($lib::$func_name => $crate::empty_or_input!($($is_const)?),)*
+                }
             }
         }
     }
@@ -144,5 +147,14 @@ macro_rules! biggest {
     };
     () => {
         0
+    };
+}
+#[macro_export]
+macro_rules! empty_or_input {
+    () => {
+        true
+    };
+    ($expr: expr) => {
+        $expr
     };
 }
