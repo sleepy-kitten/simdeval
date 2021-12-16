@@ -10,8 +10,18 @@ fn sqrt(values: [Value; 1]) -> Value {
         [Value::Bool(v)] => v as i64 as f64
     })
 }
+fn print(values: [Value; 1]) -> Value {
+    println!("{:#?}", values[0]);
+    Value::Int(0)
+}
 
-impl_functions!(Std: std; []; [Sqrt: sqrt, 1]);
+impl_functions!(
+    Std: std; 
+    []; 
+    [
+        Sqrt: sqrt(1),
+        Print: print(1); false
+    ]);
 
 
 /*
