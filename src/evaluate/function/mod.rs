@@ -16,7 +16,7 @@ where
     const NAMESPACE: &'static str;
     const MAX_ARGS: usize;
     fn from_string(namespaces: &mut Iter<&str>, identifier: &str) -> Result<T, SimdevalError>;
-    fn call(&self, node: &[Value]) -> Result<Value, SimdevalError>;
+    fn call(&self, args: &[Value]) -> Result<Value, SimdevalError>;
     fn is_const(&self) -> bool {
         true
     }
