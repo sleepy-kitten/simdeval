@@ -9,7 +9,7 @@ pub(crate) enum Std {
 }
 impl Function<Std> for Std {
     const NAMESPACE: &'static str = "std";
-    const MAX_ARGS: u8 = 4;
+    const MAX_ARGS: usize = 4;
     fn from_string(
         namespaces: &mut std::slice::Iter<&str>,
         identifier: &str,

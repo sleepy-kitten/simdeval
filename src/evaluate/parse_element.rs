@@ -9,17 +9,19 @@ use super::{
 use std::{fmt::Debug, slice::Iter};
 
 #[derive(Debug, Clone)]
-pub(crate) enum ParseElement<'a, T>
+pub(crate) enum ParseElement<T>
 where
     T: Function<T>,
+    [(); T::MAX_ARGS]:
 {
     Token(Token),
-    Node(Node<'a, T>),
+    Node(Node<T>),
 }
 
-impl<'a, T> ParseElement<'a, T>
+impl<'a, T> ParseElement<T>
 where
     T: Function<T> + Clone + Debug,
+    [(); T::MAX_ARGS]:
 {
     pub(crate) fn to_node_clone(
         &mut self,
@@ -61,9 +63,10 @@ where
     }
 }
 
-impl<'a, T> ParseElement<'a, T>
+impl<T> ParseElement<T>
 where
     T: Function<T>,
+    [(); T::MAX_ARGS]:
 {
     pub(crate) fn get_operands_indices(&self) -> Option<(usize, usize)> {
         if let Self::Node( Node::Instruction{lhs, rhs, ..}) = self {

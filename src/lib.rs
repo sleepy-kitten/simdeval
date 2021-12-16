@@ -3,6 +3,7 @@
 #![feature(maybe_uninit_extra)]
 #![feature(more_qualified_paths)]
 #![feature(portable_simd)]
+#![feature(generic_const_exprs)]
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]

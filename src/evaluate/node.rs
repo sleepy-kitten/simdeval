@@ -4,9 +4,10 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-pub(crate) enum Node<'a, T>
+pub(crate) enum Node<T>
 where
     T: Function<T>,
+    [(); T::MAX_ARGS]:
 {
     Instruction {
         operator: Operator,
@@ -19,13 +20,14 @@ where
     },
     Function {
         function: T,
-        args: Option<&'a [usize]>,
+        args: Option<[usize; T::MAX_ARGS]>,
     },
 }
 
-impl<'a, T> Node<'a, T>
+impl<'a, T> Node<T>
 where
     T: Function<T>,
+    [(); T::MAX_ARGS]:
 {
     pub(crate) fn weight(&self) -> i16 {
         match self {

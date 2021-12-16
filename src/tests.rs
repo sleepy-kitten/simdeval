@@ -10,6 +10,7 @@ use std::{
 use fasteval::Compiler;
 
 use crate::{
+    biggest,
     evaluate::{
         expression::Expression,
         function::{std::Std, Function},
@@ -18,7 +19,7 @@ use crate::{
         token::Token,
         value::single::Value,
     },
-    impl_functions,
+    impl_functions, impl_functions_test,
 };
 
 #[test]
@@ -97,6 +98,21 @@ fn sqrt(value: &[Value; 1]) -> Value {
 }
 impl_functions!(Foo: foo; [Std: std]; [Root: root, 2, Sqrt: sqrt, 1]);
 impl_functions!(Bar: bar; [Std: std, Foo: foo]; [Root: root, 2, Sqrt: sqrt, 1]);
+impl_functions_test!(
+    Baz: baz;
+    [Std: std];
+    [test(2) {
+        Value::Int(0);
+        Value::Int(9)
+    }]
+);
+#[test]
+fn test_macro() {
+    let mut expression = Expression::<Baz>::new("baz:test(3+1+5+a)");
+    expression.compile().unwrap();
+    expression.set_variable("a", Value::Int(666)).unwrap();
+    println!("{}", Baz::MAX_ARGS)
+}
 #[test]
 fn test_eval() {
     let mut expression = Expression::<Bar>::new("3+1+5+a");

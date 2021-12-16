@@ -20,25 +20,30 @@ use std::{cmp::Ordering, collections::HashMap, fmt::Debug};
 pub(crate) struct Expression<'a, T>
 where
     T: Function<T>,
+    [(); T::MAX_ARGS]:
 {
-    elements: Vec<ParseElement<'a, T>>,
+    elements: Vec<ParseElement<T>>,
     variables: Variables<'a>,
     expression: &'a str,
     top_node: Option<usize>,
 }
 
-impl<'a, 'b, T: Function<T>> Expression<'a, T> {
+impl<'a, 'b, T: Function<T>> Expression<'a, T>
+where
+    [(); T::MAX_ARGS]:,
+{
     pub(crate) fn set_indices(&'b mut self) -> Result<(), SimdevalError> {
         struct HighestWeight {
             weight: i16,
             index: usize,
         }
-        struct NodeInfo<'a, 'b, T>
+        struct NodeInfo<'b, T>
         where
             T: Function<T>,
+            [(); T::MAX_ARGS]:
         {
             index: usize,
-            node: &'b mut Node<'a, T>,
+            node: &'b mut Node<T>,
             weight: i16,
         }
         let mut bracket_weight = 0;
@@ -51,7 +56,7 @@ impl<'a, 'b, T: Function<T>> Expression<'a, T> {
             .iter_mut()
             .enumerate()
             .filter_map(|(index, e)| match e {
-                ParseElement::<'a, T>::Node(node) => match node {
+                ParseElement::<T>::Node(node) => match node {
                     <Node<T>>::Instruction {
                         operator: o,
                         lhs,
@@ -60,7 +65,7 @@ impl<'a, 'b, T: Function<T>> Expression<'a, T> {
                         *lhs = index - 1;
                         *rhs = index + 1;
                         let weight = o.weight();
-                        let info = NodeInfo::<'a, 'b, T> {
+                        let info = NodeInfo::<'b, T> {
                             index,
                             node,
                             weight: weight + bracket_weight,
@@ -126,6 +131,8 @@ impl<'a, 'b, T: Function<T>> Expression<'a, T> {
 impl<'a, T: Function<T>> Expression<'a, T>
 where
     T: Function<T> + Clone + Debug,
+    [(); T::MAX_ARGS]:
+    
 {
     /// creates a new `Expression` from a string
     pub fn new(expression: &'a str) -> Self {
@@ -156,9 +163,7 @@ where
         }
     }
 
-    pub fn optimize(&mut self) {
-
-    }
+    pub fn optimize(&mut self) {}
     fn new_token_from_kind(&mut self, token_kind: TokenKind, start: usize) {
         let token = Token::new(token_kind, start);
         self.elements.push(ParseElement::Token(token));
@@ -168,7 +173,11 @@ where
         self.variables.set(identifier, value)
     }
 
-    pub fn set_variable_by_index(&mut self, index: usize, value: Value) -> Result<(), SimdevalError> {
+    pub fn set_variable_by_index(
+        &mut self,
+        index: usize,
+        value: Value,
+    ) -> Result<(), SimdevalError> {
         self.variables.set_by_index(index, value)
     }
     fn new_token(&mut self, chr: u8, start: usize) -> Result<(), SimdevalError> {
@@ -333,6 +342,7 @@ where
 impl<'a, T: Function<T>> Expression<'a, T>
 where
     T: Function<T> + Clone + Debug,
+    [(); T::MAX_ARGS]:
 {
     pub fn eval(&mut self) -> Result<Value, SimdevalError> {
         self.eval_recursive()
