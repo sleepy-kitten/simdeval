@@ -157,7 +157,7 @@ where
     #[inline]
     pub fn compile(&mut self) -> Result<(), SimdevalError> {
         if self.top_node.is_none() {
-            self.to_tokens()?.to_nodes::<4, 16>()?.set_indices()
+            self.to_tokens()?.to_nodes::<4>()?.set_indices()
         } else {
             Err(SimdevalError::AlreadyCompiled)
         }
@@ -226,7 +226,7 @@ where
         }
         Ok(self)
     }
-    pub(crate) fn to_nodes<const N: usize, const V: usize>(
+    pub(crate) fn to_nodes<const N: usize>(
         &mut self,
     ) -> Result<&mut Self, SimdevalError> {
         let mut namespaces = Stack::<&str, N>::new();

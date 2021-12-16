@@ -64,7 +64,7 @@ fn bench_compile_to_nodes(b: &mut test::Bencher) {
     test.compile().unwrap();
     b.iter(|| {
         test.to_tokens().unwrap();
-        test.to_nodes::<4, 16>().unwrap();
+        test.to_nodes::<4>().unwrap();
         test.set_expression(expression);
     })
 }
@@ -76,7 +76,7 @@ fn bench_compile_set_indices(b: &mut test::Bencher) {
     test.compile().unwrap();
     b.iter(|| {
         test.to_tokens().unwrap();
-        test.to_nodes::<4, 16>().unwrap();
+        test.to_nodes::<4>().unwrap();
         test.set_indices().unwrap();
         test.set_expression(expression);
     })
