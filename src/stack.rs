@@ -9,6 +9,7 @@ use std::{fmt::Debug, mem::MaybeUninit, slice::Iter};
 /// will panic if more is pushed to the stack than it can hold,
 /// or if more is popped than pushed
 
+#[derive(Clone)]
 pub(crate) struct Stack<T, const N: usize>
 where
     T: Copy,
@@ -66,13 +67,26 @@ where
                 *i = MaybeUninit::uninit();
             }
         }
+        self.index = 0;
     }
     /// returns an iter over the elements of the stack
     pub fn iter(&self) -> Iter<T> {
         unsafe { MaybeUninit::slice_assume_init_ref(&self.array[0..self.index]) }.iter()
     }
+    /// returns a slice of the values contained
     pub fn slice(&self) -> &[T] {
         unsafe { MaybeUninit::slice_assume_init_ref(&self.array[0..self.index]) }
+    }
+    pub fn full_array(&self) -> Option<[T; N]> {
+        if self.index == N {
+            unsafe { Some(MaybeUninit::array_assume_init(self.array)) }
+        } else {
+            None
+        }
+    }
+    /// returns the length of the stack
+    pub fn len(&self) -> usize {
+        self.index
     }
 }
 
