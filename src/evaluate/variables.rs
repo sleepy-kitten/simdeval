@@ -1,15 +1,24 @@
-use std::ops::Index;
+use std::{
+    ops::{Index, IndexMut},
+    simd::{LaneCount, SupportedLaneCount},
+};
 
 use crate::error::SimdevalError;
 
-use super::value::single::Value;
+use super::value::{single::Single, Value};
 
 #[derive(Debug)]
-pub(crate) struct Variables<'a> {
+pub(crate) struct Variables<'a, const LANES: usize>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
     identifiers: Vec<&'a str>,
-    values: Vec<Value>,
+    values: Vec<Value<LANES>>,
 }
-impl<'a> Variables<'a> {
+impl<'a, const LANES: usize> Variables<'a, LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
     pub(crate) fn clear(&mut self) {
         self.identifiers.clear();
         self.values.clear();
@@ -22,9 +31,13 @@ impl<'a> Variables<'a> {
     }
     pub(crate) fn push(&mut self, identifier: &'a str) {
         self.identifiers.push(identifier);
-        self.values.push(Value::Int(0));
+        self.values.push(Value::Single(Single::Int(0)));
     }
-    pub(crate) fn set(&mut self, identifier: &'a str, value: Value) -> Result<(), SimdevalError> {
+    pub(crate) fn set(
+        &mut self,
+        identifier: &'a str,
+        value: Value<LANES>,
+    ) -> Result<(), SimdevalError> {
         let index = self
             .identifiers
             .binary_search(&identifier)
@@ -32,7 +45,11 @@ impl<'a> Variables<'a> {
         self.values[index] = value;
         Ok(())
     }
-    pub(crate) fn set_by_index(&mut self, index: usize, value: Value) -> Result<(), SimdevalError> {
+    pub(crate) fn set_by_index(
+        &mut self,
+        index: usize,
+        value: Value<LANES>,
+    ) -> Result<(), SimdevalError> {
         *self
             .values
             .get_mut(index)
@@ -44,7 +61,7 @@ impl<'a> Variables<'a> {
             i
         } else {
             self.identifiers.push(identifier);
-            self.values.push(Value::Int(0));
+            self.values.push(Value::Single(Single::Int(0)));
             self.identifiers.len() - 1
         }
     }
@@ -53,10 +70,21 @@ impl<'a> Variables<'a> {
     }
 }
 
-impl<'a> Index<usize> for Variables<'a> {
-    type Output = Value;
+impl<'a, const LANES: usize> Index<usize> for Variables<'a, LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    type Output = Value<LANES>;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.values[index]
+    }
+}
+
+impl<'a, const LANES: usize> IndexMut<usize> for Variables<'a, LANES> where
+    LaneCount<LANES>: SupportedLaneCount
+{
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.values[index]
     }
 }

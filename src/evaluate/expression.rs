@@ -6,10 +6,15 @@ use super::{
     node::Node,
     parse_element::ParseElement,
     token::Token,
-    value::single::Value,
+    value::{single::Single, Value},
     variables::Variables,
 };
-use std::{cmp::Ordering, collections::HashMap, fmt::Debug};
+use std::{
+    cmp::Ordering,
+    collections::HashMap,
+    fmt::Debug,
+    simd::{LaneCount, SupportedLaneCount},
+};
 
 struct IndexedWeight {
     weight: i16,
@@ -22,20 +27,22 @@ struct IndexedWeight {
 ///
 /// # UB
 /// Compiling the same expression multiple times is UB
-pub(crate) struct Expression<'a, T>
+pub(crate) struct Expression<'a, T, const LANES: usize>
 where
-    T: Function<T>,
+    T: Function<T, LANES>,
+    LaneCount<LANES>: SupportedLaneCount,
     [(); T::MAX_ARGS]:,
 {
-    elements: Vec<ParseElement<T>>,
-    variables: Variables<'a>,
+    elements: Vec<ParseElement<T, LANES>>,
+    variables: Variables<'a, LANES>,
     expression: &'a str,
     top_node: Option<usize>,
 }
 
-impl<'a, 'b, T: Function<T>> Expression<'a, T>
+impl<'a, 'b, T: Function<T, LANES>, const LANES: usize> Expression<'a, T, LANES>
 where
     T: Clone + Debug,
+    LaneCount<LANES>: SupportedLaneCount,
     [(); T::MAX_ARGS]:,
 {
     pub(crate) fn to_tokens(&mut self) -> Result<&mut Self, SimdevalError> {
@@ -51,11 +58,11 @@ where
             if let ParseElement::Token(token) = element {
                 match token.kind() {
                     TokenKind::Literal(l) => {
-                        let value = match l {
-                            Literal::Bool => Value::Bool(token.slice(string).parse::<bool>()?),
-                            Literal::Float => Value::Float(token.slice(string).parse::<f64>()?),
-                            Literal::Int => Value::Int(token.slice(string).parse::<i64>()?),
-                        };
+                        let value = Value::Single(match l {
+                            Literal::Bool => Single::Bool(token.slice(string).parse::<bool>()?),
+                            Literal::Float => Single::Float(token.slice(string).parse::<f64>()?),
+                            Literal::Int => Single::Int(token.slice(string).parse::<i64>()?),
+                        });
                         *element = ParseElement::Node(Node::Literal(value));
                     }
                     TokenKind::Operator(o) => {
@@ -69,7 +76,7 @@ where
                         let identifier = token.slice(string);
                         let mut namespaces = namespaces.iter();
                         let function =
-                            <T as Function<T>>::from_string(&mut namespaces, identifier)?;
+                            <T as Function<T, LANES>>::from_string(&mut namespaces, identifier)?;
                         *element = ParseElement::Node(Node::Function {
                             function,
                             args: Stack::new(),
@@ -80,7 +87,7 @@ where
                         namespaces.push(token.slice(string));
                     }
                     TokenKind::Special(Special::NegZero) => {
-                        *element = ParseElement::Node(Node::Literal(Value::Int(0)));
+                        *element = ParseElement::Node(Node::Literal(Value::Single(Single::Int(0))));
                     }
                     TokenKind::Identifier(Identifier::Variable) => {
                         let identifier = token.slice(string);
@@ -93,13 +100,14 @@ where
         Ok(self)
     }
     pub(crate) fn set_indices(&'b mut self) -> Result<&mut Self, SimdevalError> {
-        struct NodeInfo<'b, T>
+        struct NodeInfo<'b, T, const LANES: usize>
         where
-            T: Function<T>,
+            T: Function<T, LANES>,
+            LaneCount<LANES>: SupportedLaneCount,
             [(); T::MAX_ARGS]:,
         {
             index: usize,
-            node: &'b mut Node<T>,
+            node: &'b mut Node<T, LANES>,
             weight: i16,
         }
         let mut bracket_weight = 0;
@@ -112,8 +120,8 @@ where
             .iter_mut()
             .enumerate()
             .filter_map(|(index, e)| match e {
-                ParseElement::<T>::Node(node) => match node {
-                    <Node<T>>::Instruction {
+                ParseElement::<T, LANES>::Node(node) => match node {
+                    <Node<T, LANES>>::Instruction {
                         operator: o,
                         lhs,
                         rhs,
@@ -121,15 +129,15 @@ where
                         *lhs = index - 1;
                         *rhs = index + 1;
                         let weight = o.weight();
-                        let info = NodeInfo::<'b, T> {
+                        let info = NodeInfo::<'b, T, LANES> {
                             index,
                             node,
                             weight: weight + bracket_weight,
                         };
                         Some(info)
                     }
-                    <Node<T>>::Function { function, args } => {
-                        let info = NodeInfo::<'b, T> {
+                    <Node<T, LANES>>::Function { function, args } => {
+                        let info = NodeInfo::<'b, T, LANES> {
                             index,
                             node,
                             weight: bracket_weight,
@@ -262,11 +270,27 @@ where
         }
         Ok(())
     }
+    pub fn to_simd(&mut self) {
+        for element in self.elements.iter_mut() {
+            if let ParseElement::Node(node) = element {
+                match node {
+                    Node::Literal(v) => {
+                        v.to_simd();
+                    }
+                    Node::Variable { index } => {
+                        self.variables[*index].to_simd();
+                    }
+                    _ => (),
+                }
+            }
+        }
+    }
 }
-impl<'a, T: Function<T>> Expression<'a, T>
+impl<'a, T: Function<T, LANES>, const LANES: usize> Expression<'a, T, LANES>
 where
-    T: Function<T> + Clone + Debug,
+    T: Function<T, LANES> + Clone + Debug,
     [(); T::MAX_ARGS]:,
+    LaneCount<LANES>: SupportedLaneCount,
 {
     /// creates a new `Expression` from a string
     pub fn new(expression: &'a str) -> Self {
@@ -278,7 +302,7 @@ where
         }
     }
     /// Get a reference to the expression's elements.
-    pub(crate) fn elements(&self) -> &[ParseElement<T>] {
+    pub(crate) fn elements(&self) -> &[ParseElement<T, LANES>] {
         self.elements.as_ref()
     }
     fn clear(&mut self) {
@@ -312,7 +336,7 @@ where
             Err(SimdevalError::NotCompiled)
         }
     }
-    fn optimize_recursive(&mut self, index: usize) -> Result<Option<Value>, SimdevalError> {
+    fn optimize_recursive(&mut self, index: usize) -> Result<Option<Value<LANES>>, SimdevalError> {
         if let ParseElement::Node(node) = &self.elements[index] {
             match node {
                 Node::Instruction { operator, lhs, rhs } => {
@@ -331,9 +355,16 @@ where
                 }
                 Node::Literal(value) => Ok(Some(*value)),
                 Node::Function { function, args } => {
-                    let mut args_eval = Stack::<Value, {T::MAX_ARGS}>::new();
+                    let function = function.clone();
+                    let args = args.clone();
+                    let mut args_eval = Stack::<Value<LANES>, { T::MAX_ARGS }>::new();
                     for arg in args.iter() {
-                        args_eval.push(self.eval_recursive(*arg)?);
+                        let arg_eval = self.optimize_recursive(*arg)?;
+                        if let Some(arg) = None {
+                            args_eval.push(arg)
+                        } else {
+                            return Ok(None);
+                        }
                     }
                     if function.is_const() {
                         let value = function.call(args_eval.slice())?;
@@ -354,14 +385,18 @@ where
         self.elements.push(ParseElement::Token(token));
     }
 
-    pub fn set_variable(&mut self, identifier: &'a str, value: Value) -> Result<(), SimdevalError> {
+    pub fn set_variable(
+        &mut self,
+        identifier: &'a str,
+        value: Value<LANES>,
+    ) -> Result<(), SimdevalError> {
         self.variables.set(identifier, value)
     }
 
     pub fn set_variable_by_index(
         &mut self,
         index: usize,
-        value: Value,
+        value: Value<LANES>,
     ) -> Result<(), SimdevalError> {
         self.variables.set_by_index(index, value)
     }
@@ -474,20 +509,21 @@ where
     }
 }
 
-impl<'a, T: Function<T>> Expression<'a, T>
+impl<'a, T: Function<T, LANES>, const LANES: usize> Expression<'a, T, LANES>
 where
-    T: Function<T> + Clone + Debug,
+    T: Function<T, LANES> + Clone + Debug,
     [(); T::MAX_ARGS]:,
+    LaneCount<LANES>: SupportedLaneCount,
 {
     #[inline]
-    pub fn eval(&self) -> Result<Value, SimdevalError> {
+    pub fn eval(&self) -> Result<Value<LANES>, SimdevalError> {
         if let Some(top_node) = self.top_node {
             self.eval_recursive(top_node)
         } else {
             Err(SimdevalError::NotCompiled)
         }
     }
-    fn eval_recursive(&self, index: usize) -> Result<Value, SimdevalError> {
+    fn eval_recursive(&self, index: usize) -> Result<Value<LANES>, SimdevalError> {
         if let ParseElement::Node(n) = &self.elements[index] {
             Ok(match n {
                 Node::Instruction { operator, lhs, rhs } => {
@@ -496,7 +532,7 @@ where
                 Node::Literal(value) => *value,
                 Node::Variable { index } => self.variables[*index],
                 Node::Function { function, args } => {
-                    let mut args_eval = Stack::<Value, { T::MAX_ARGS }>::new();
+                    let mut args_eval = Stack::<Value<LANES>, { T::MAX_ARGS }>::new();
                     for arg in args.iter() {
                         args_eval.push(self.eval_recursive(*arg)?);
                     }

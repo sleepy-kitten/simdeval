@@ -1,19 +1,22 @@
+use std::simd::{LaneCount, SupportedLaneCount};
+
 use crate::stack::Stack;
 
-use super::{enums::Operator, function::Function, value::single::Value};
+use super::{enums::Operator, function::Function, value::{single::Single, Value}};
 
 #[derive(Debug)]
-pub(crate) enum Node<T>
+pub(crate) enum Node<T, const LANES: usize>
 where
-    T: Function<T>,
+    T: Function<T, LANES>,
     [(); T::MAX_ARGS]:,
+    LaneCount<LANES>: SupportedLaneCount
 {
     Instruction {
         operator: Operator,
         lhs: usize,
         rhs: usize,
     },
-    Literal(Value),
+    Literal(Value<LANES>),
     Variable {
         index: usize,
     },
@@ -23,10 +26,11 @@ where
     },
 }
 
-impl<'a, T> Node<T>
+impl<'a, T, const LANES: usize> Node<T, LANES>
 where
-    T: Function<T>,
+    T: Function<T, LANES>,
     [(); T::MAX_ARGS]:,
+    LaneCount<LANES>: SupportedLaneCount
 {
     pub(crate) fn weight(&self) -> i16 {
         match self {
@@ -36,7 +40,7 @@ where
     }
     #[inline(always)]
     pub(crate) fn as_mut_instruction_indices(&mut self) -> (&mut usize, &mut usize) {
-        if let <Node<T>>::Instruction { operator, lhs, rhs } = self {
+        if let <Node<T, LANES>>::Instruction { operator, lhs, rhs } = self {
             (lhs, rhs)
         } else {
             panic!()

@@ -1,6 +1,9 @@
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::{
+    ops::{Add, Div, Mul, Rem, Sub},
+    simd::{LaneCount, SupportedLaneCount},
+};
 
-use super::value::single::Value;
+use super::value::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TokenKind {
@@ -83,7 +86,14 @@ impl Operator {
             Self::SmallerEqual => 11,
         }
     }
-    pub(crate) fn eval(&self, lhs: Value, rhs: Value) -> Value {
+    pub(crate) fn eval<const LANES: usize>(
+        &self,
+        lhs: Value<LANES>,
+        rhs: Value<LANES>,
+    ) -> Value<LANES>
+    where
+        LaneCount<LANES>: SupportedLaneCount,
+    {
         match self {
             Self::Add => lhs + rhs,
             Self::Sub => lhs - rhs,
@@ -91,16 +101,19 @@ impl Operator {
             Self::Div => lhs / rhs,
             Self::Mod => lhs % rhs,
             Self::Pow => lhs.pow(rhs),
-            Self::Equal => Value::Bool(lhs == rhs),
-            Self::NotEqual => Value::Bool(lhs != rhs),
-            Self::Greater => Value::Bool(lhs > rhs),
-            Self::GreaterEqual => Value::Bool(lhs >= rhs),
-            Self::Smaller => Value::Bool(lhs < rhs),
-            Self::SmallerEqual => Value::Bool(lhs <= rhs),
+            _ => todo!(),
+            /*
+            Self::Equal => Single::Bool(lhs == rhs),
+            Self::NotEqual => Single::Bool(lhs != rhs),
+            Self::Greater => Single::Bool(lhs > rhs),
+            Self::GreaterEqual => Single::Bool(lhs >= rhs),
+            Self::Smaller => Single::Bool(lhs < rhs),
+            Self::SmallerEqual => Single::Bool(lhs <= rhs),
             Self::And => lhs.and(rhs),
             Self::Or => lhs.or(rhs),
             Self::Xor => lhs.xor(rhs),
             _ => unreachable!(),
+            */
         }
     }
 }

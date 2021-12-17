@@ -3,17 +3,19 @@ macro_rules! impl_functions {
     ($lib: ident: $lib_namespace: ident; [$($import: ty: $import_namespace: ident),*]; [$($func_name: ident: $func: ident($arg_count: expr) $(;$is_const: expr)?),+]) => {
         #[allow(non_camel_case_types)]
         #[derive(Debug, Clone)]
-        pub enum $lib {
+        pub enum $lib<const LANES: usize>
+        where LaneCount<LANES>: SupportedLaneCount {
             $($func_name),+,
             $($import_namespace($import)),*
         }
-        impl $crate::evaluate::function::Function<$lib> for $lib {
+        impl<const LANES: usize> $crate::evaluate::function::Function<$lib<LANES>, LANES> for $lib<LANES>
+        where LaneCount<LANES>: SupportedLaneCount{
             const NAMESPACE: &'static str = stringify!($lib_namespace);
             const MAX_ARGS: usize = $crate::biggest!($($arg_count),+);
             fn from_string(
                 namespaces: &mut std::slice::Iter<&str>,
                 identifier: &str,
-            ) -> Result<$lib, $crate::error::SimdevalError> {
+            ) -> Result<$lib<LANES>, $crate::error::SimdevalError> {
                 if let Some(&namespace) = dbg!(namespaces.next()) {
                     Ok(match namespace {
                         $(<$import>::NAMESPACE => $lib::$import_namespace(<$import>::from_string(namespaces, identifier)?),)*
@@ -27,7 +29,7 @@ macro_rules! impl_functions {
                     })
                 }
             }
-            fn call(&self, args: &[$crate::evaluate::value::single::Value]) -> Result<$crate::evaluate::value::single::Value, $crate::error::SimdevalError> {
+            fn call(&self, args: &[$crate::evaluate::value::Value<LANES>]) -> Result<$crate::evaluate::value::Value<LANES>, $crate::error::SimdevalError> {
                 Ok(match self {
                     $($lib::$func_name => { if args.len() == $arg_count {$func(args.try_into()?)} else {return Err($crate::error::SimdevalError::InvalidArgs)}},)+
                     $($lib::$import_namespace(i) => i.call(args)?,)*
@@ -52,13 +54,13 @@ macro_rules! impl_functions_test {
             $($import_namespace($import),)+
             $($func,)*
         }
-        impl $crate::evaluate::function::Function<$lib> for $lib {
+        impl $crate::evaluate::function::Function<$lib, const LANES: usize> for $lib<LANES> {
             const NAMESPACE: &'static str = stringify!($lib_namespace);
             const MAX_ARGS: usize = biggest!($($arg_count),*);
             fn from_string(
                 namespaces: &mut std::slice::Iter<&str>,
                 identifier: &str,
-            ) -> Result<$lib, $crate::error::SimdevalError> {
+            ) -> Result<$lib<LANES>, $crate::error::SimdevalError> {
                 if let Some(&namespace) = dbg!(namespaces.next()) {
                     Ok(match namespace {
                         $(<$import>::NAMESPACE => $lib::$import_namespace(<$import>::from_string(namespaces, identifier)?),)+

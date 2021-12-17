@@ -3,24 +3,85 @@ use std::{
     simd::{self, f64x8, i64x8, LaneCount, SupportedLaneCount},
 };
 
+#[derive(Debug, Clone, Copy)]
 pub enum Simd<const LANES: usize>
 where
     LaneCount<LANES>: SupportedLaneCount,
 {
-    Int(simd::Simd<i64, LANES>),
+    //Int(simd::Simd<i64, LANES>),
     Float(simd::Simd<f64, LANES>),
-    Bool(simd::Simd<u64, LANES>),
+    //Bool(simd::Simd<u64, LANES>),
 }
-impl<const LANES: usize> Simd<LANES> where LaneCount<LANES>: SupportedLaneCount {
-    pub fn as_float(&self) -> simd::Simd<f64, LANES> {
-        match self{
-            Simd::Int(v) => {
-                let a = v.as_array();
-            }
+impl<const LANES: usize> Simd<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    fn as_float(&self) -> simd::Simd<f64, LANES> {
+        match self {
+            Simd::Float(v) => *v,
         }
     }
 }
 
+impl<const LANES: usize> Add for Simd<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    type Output = Simd<LANES>;
+    fn add(self, rhs: Self) -> Self::Output {
+        Simd::Float(self.as_float() + rhs.as_float())
+    }
+}
+impl<const LANES: usize> Sub for Simd<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    type Output = Simd<LANES>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Simd::Float(self.as_float() - rhs.as_float())
+    }
+}
+impl<const LANES: usize> Mul for Simd<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    type Output = Simd<LANES>;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Simd::Float(self.as_float() * rhs.as_float())
+    }
+}
+
+impl<const LANES: usize> Div for Simd<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    type Output = Simd<LANES>;
+    fn div(self, rhs: Self) -> Self::Output {
+        Simd::Float(self.as_float() / rhs.as_float())
+    }
+}
+impl<const LANES: usize> Rem for Simd<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    type Output = Simd<LANES>;
+    fn rem(self, rhs: Self) -> Self::Output {
+        Simd::Float(self.as_float() % rhs.as_float())
+    }
+}
+
+impl<const LANES: usize> Simd<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    pub(crate) fn pow(self, rhs: Self) -> Self {
+        let lhs = self.as_float().to_array();
+        let rhs = self.as_float().to_array();
+        Simd::Float(lhs.zip(rhs).map(|(lhs, rhs)| lhs.powf(rhs)).into())
+    }
+}
+/*
 impl<const LANES: usize> Add for Simd<LANES>
 where
     LaneCount<LANES>: SupportedLaneCount,
@@ -148,3 +209,4 @@ where
         }
     }
 }
+*/
