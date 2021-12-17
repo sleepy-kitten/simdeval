@@ -24,13 +24,14 @@ use crate::{
 
 #[test]
 fn test_parse_fast() {
-    let expression = "2+6^2*4";
+    let expression = "print(2+6^2*4)";
     let mut expression = Expression::<Std>::new(expression);
     expression.compile().unwrap();
     expression.optimize().unwrap();
 
     //let temp = expression;
     println!("compiled: {:#?}", expression);
+    expression.eval().unwrap();
 }
 #[bench]
 fn bench_parse_fast(b: &mut test::Bencher) {

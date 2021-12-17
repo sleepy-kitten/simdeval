@@ -13,6 +13,51 @@ pub enum Single {
     Float(f64),
     Bool(bool),
 }
+impl Value {
+    pub fn to_float(&mut self) {
+        *self = Value::Float(match self {
+            Value::Int(v) => *v as f64,
+            Value::Float(v) => *v,
+            Value::Bool(v) => *v as u8 as f64
+        })
+    }
+    pub fn to_int(&mut self) {
+        *self = Value::Int(match self {
+            Value::Int(v) => *v,
+            Value::Float(v) => *v as i64,
+            Value::Bool(v) => *v as i64
+        })
+    }
+    pub fn to_bool(&mut self) {
+        *self = Value::Bool(match self {
+            Value::Int(v) => *v != 0,
+            Value::Float(v) => *v != 0.0,
+            Value::Bool(v) => *v
+        })
+    }
+
+    pub fn as_float(&self) -> f64 {
+        match self {
+            Value::Int(v) => *v as f64,
+            Value::Float(v) => *v,
+            Value::Bool(v) => *v as u8 as f64
+        }
+    }
+    pub fn as_int(&self) -> i64 {
+        match self {
+            Value::Int(v) => *v,
+            Value::Float(v) => *v as i64,
+            Value::Bool(v) => *v as i64
+        }
+    }
+    pub fn as_bool(&self) -> bool {
+        match self {
+            Value::Int(v) => *v != 0,
+            Value::Float(v) => *v != 0.0,
+            Value::Bool(v) => *v
+        }
+    }
+}
 impl Add for Value {
     type Output = Value;
     fn add(self, rhs: Self) -> Self::Output {

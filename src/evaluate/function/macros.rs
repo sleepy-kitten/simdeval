@@ -130,9 +130,9 @@ macro_rules! impl_functions_test2 {
 macro_rules! biggest {
     ($first: expr, $second: expr, $($rest: expr),*) => {
         if $first > $second {
-            biggest!($first, $($rest),+)
+            $crate::biggest!($first, $($rest),+)
         } else {
-            biggest!($second, $($rest),+)
+            $crate::biggest!($second, $($rest),+)
         }
     };
     ($first: expr, $second: expr) => {

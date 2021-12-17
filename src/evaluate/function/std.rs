@@ -14,13 +14,29 @@ fn print(values: [Value; 1]) -> Value {
     println!("{:#?}", values[0]);
     Value::Int(0)
 }
+fn log(values: [Value; 2]) -> Value {
+    let num = values[0].as_float();
+    let base = values[1].as_float();
+    Value::Float(num.log(base))
+
+}
+fn abs(values: [Value; 1]) -> Value {
+    let num = values[0];
+    match num {
+        Value::Float(v) => Value::Float(v.abs()),
+        Value::Int(v) => Value::Int(v.abs()),
+        Value::Bool(v) => num,
+    }
+}
 
 impl_functions!(
     Std: std; 
     []; 
     [
         Sqrt: sqrt(1),
-        Print: print(1); false
+        Print: print(1); false,
+        Log: log(2),
+        Abs: abs(1)
     ]);
 
 
