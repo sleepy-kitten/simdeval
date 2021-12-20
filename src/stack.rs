@@ -10,14 +10,14 @@ use std::{fmt::Debug, mem::MaybeUninit, slice::Iter};
 /// or if more is popped than pushed
 
 #[derive(Clone)]
-pub(crate) struct Stack<T, const N: usize>
+pub(crate) struct Stack<T, const SIZE: usize>
 where
     T: Copy,
 {
-    array: [MaybeUninit<T>; N],
+    array: [MaybeUninit<T>; SIZE],
     index: usize,
 }
-impl<T, const N: usize> Drop for Stack<T, N>
+impl<T, const SIZE: usize> Drop for Stack<T, SIZE>
 where
     T: Copy,
 {
@@ -30,14 +30,14 @@ where
         }
     }
 }
-impl<T, const N: usize> Stack<T, N>
+impl<T, const SIZE: usize> Stack<T, SIZE>
 where
     T: Copy,
 {
     /// constructs a new `Stack` with size N
     pub fn new() -> Self {
         Self {
-            array: [MaybeUninit::uninit(); N],
+            array: [MaybeUninit::uninit(); SIZE],
             index: 0,
         }
     }
@@ -77,8 +77,8 @@ where
     pub fn slice(&self) -> &[T] {
         unsafe { MaybeUninit::slice_assume_init_ref(&self.array[0..self.index]) }
     }
-    pub fn full_array(&self) -> Option<[T; N]> {
-        if self.index == N {
+    pub fn full_array(&self) -> Option<[T; SIZE]> {
+        if self.index == SIZE {
             unsafe { Some(MaybeUninit::array_assume_init(self.array)) }
         } else {
             None
@@ -99,5 +99,21 @@ where
             .field("array", &self.slice())
             .field("index", &self.index)
             .finish()
+    }
+}
+
+impl<T, const SIZE: usize> From<&[T]> for Stack<T, SIZE> where T: Copy {
+    fn from(slice: &[T]) -> Self {
+        if slice.len() > SIZE {
+            panic!("slice bigger than stack");
+        }
+        let stack = Self {
+            array: [MaybeUninit::uninit(); SIZE],
+            index: 0,
+        };
+        for item in slice {
+            stack.push(*item);
+        }
+        stack
     }
 }
