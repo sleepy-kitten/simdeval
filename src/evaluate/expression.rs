@@ -1,4 +1,4 @@
-use crate::{error::SimdevalError, stack::Stack};
+use crate::{error::Error, stack::Stack};
 
 use super::{
     enums::{Bracket, Identifier, Literal, Operator, Special, TokenKind},
@@ -9,6 +9,7 @@ use super::{
     value::{single::Single, Value},
     variables::Variables,
 };
+use core::fmt;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -21,85 +22,107 @@ struct IndexedWeight {
     index: usize,
 }
 
-#[derive(Debug)]
-
 /// An `Expression` contains the expression string and the compiled version of that expression.
 ///
 /// # UB
 /// Compiling the same expression multiple times is UB
-pub(crate) struct Expression<'a, T, const LANES: usize>
+#[derive(Debug)]
+pub struct Expression<T, const LANES: usize>
 where
     T: Function<T, LANES>,
     LaneCount<LANES>: SupportedLaneCount,
     [(); T::MAX_ARGS]:,
 {
     elements: Vec<ParseElement<T, LANES>>,
-    variables: Variables<'a, LANES>,
-    expression: &'a str,
+    variables: Variables<LANES>,
+    expression: String,
     top_node: Option<usize>,
 }
-
-impl<'a, 'b, T: Function<T, LANES>, const LANES: usize> Expression<'a, T, LANES>
+impl<T, const LANES: usize> fmt::Display for Expression<T, LANES>
 where
+    T: Function<T, LANES>,
     T: Clone + Debug,
     LaneCount<LANES>: SupportedLaneCount,
     [(); T::MAX_ARGS]:,
 {
-    pub(crate) fn to_tokens(&mut self) -> Result<&mut Self, SimdevalError> {
-        for (index, &chr) in self.expression.as_bytes().iter().enumerate() {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.expression)
+    }
+}
+impl<'b, T, const LANES: usize> Expression<T, LANES>
+where
+    T: Function<T, LANES>,
+    T: Clone + Debug,
+    LaneCount<LANES>: SupportedLaneCount,
+    [(); T::MAX_ARGS]:,
+{
+    pub(crate) fn to_tokens(&mut self) -> Result<&mut Self, Error> {
+        // WHY DO I HAVE TO CLONE NOW!?
+        let cloned = self.expression.clone();
+        for (index, &chr) in cloned.as_bytes().iter().enumerate() {
             self.push(chr, index)?;
         }
         Ok(self)
     }
-    pub(crate) fn to_nodes<const N: usize>(&mut self) -> Result<&mut Self, SimdevalError> {
-        let mut namespaces = Stack::<&str, N>::new();
-        let string = self.expression;
-        for element in &mut self.elements {
-            if let ParseElement::Token(token) = element {
-                match token.kind() {
-                    TokenKind::Literal(l) => {
-                        let value = Value::Single(match l {
-                            Literal::Bool => Single::Bool(token.slice(string).parse::<bool>()?),
-                            Literal::Float => Single::Float(token.slice(string).parse::<f64>()?),
-                            Literal::Int => Single::Int(token.slice(string).parse::<i64>()?),
-                        });
-                        *element = ParseElement::Node(Node::Literal(value));
-                    }
-                    TokenKind::Operator(o) => {
-                        *element = ParseElement::Node(Node::Instruction {
-                            operator: o,
-                            lhs: 0,
-                            rhs: 0,
-                        })
-                    }
-                    TokenKind::Identifier(Identifier::Function) => {
-                        let identifier = token.slice(string);
-                        let mut namespaces = namespaces.iter();
-                        let function =
-                            <T as Function<T, LANES>>::from_string(&mut namespaces, identifier)?;
-                        *element = ParseElement::Node(Node::Function {
-                            function,
-                            args: Stack::new(),
-                        })
-                    }
-                    TokenKind::Bracket(_) | TokenKind::Special(Special::Comma) => (),
-                    TokenKind::Special(Special::Namespace) => {
-                        namespaces.push(token.slice(string));
-                    }
-                    TokenKind::Special(Special::NegZero) => {
-                        *element = ParseElement::Node(Node::Literal(Value::Single(Single::Int(0))));
-                    }
-                    TokenKind::Identifier(Identifier::Variable) => {
-                        let identifier = token.slice(string);
-                        let index = self.variables.find_or_set(identifier);
-                        *element = ParseElement::Node(Node::Variable { index });
-                    }
-                };
+    pub(crate) fn to_nodes<const N: usize>(&mut self) -> Result<&mut Self, Error> {
+        {
+            let mut namespaces = Stack::<&str, N>::new();
+            for element in &mut self.elements {
+                if let ParseElement::Token(token) = element {
+                    match token.kind() {
+                        TokenKind::Literal(l) => {
+                            let value = Value::Single(match l {
+                                Literal::Bool => {
+                                    Single::Bool(token.slice(&self.expression).parse::<bool>()?)
+                                }
+                                Literal::Float => {
+                                    Single::Float(token.slice(&self.expression).parse::<f64>()?)
+                                }
+                                Literal::Int => {
+                                    Single::Int(token.slice(&self.expression).parse::<i64>()?)
+                                }
+                            });
+                            *element = ParseElement::Node(Node::Literal(value));
+                        }
+                        TokenKind::Operator(o) => {
+                            *element = ParseElement::Node(Node::Instruction {
+                                operator: o,
+                                lhs: 0,
+                                rhs: 0,
+                            })
+                        }
+                        TokenKind::Identifier(Identifier::Function) => {
+                            let identifier = token.slice(&self.expression);
+                            let mut namespaces = namespaces.iter();
+                            let function = <T as Function<T, LANES>>::from_string(
+                                &mut namespaces,
+                                identifier,
+                            )?;
+                            *element = ParseElement::Node(Node::Function {
+                                function,
+                                args: Stack::new(),
+                            })
+                        }
+                        TokenKind::Bracket(_) | TokenKind::Special(Special::Comma) => (),
+                        TokenKind::Special(Special::Namespace) => {
+                            namespaces.push(token.slice(&self.expression));
+                        }
+                        TokenKind::Special(Special::NegZero) => {
+                            *element =
+                                ParseElement::Node(Node::Literal(Value::Single(Single::Int(0))));
+                        }
+                        TokenKind::Identifier(Identifier::Variable) => {
+                            let identifier = token.slice(&self.expression);
+                            let index = self.variables.find_or_set(identifier);
+                            *element = ParseElement::Node(Node::Variable { index });
+                        }
+                    };
+                }
             }
         }
         Ok(self)
     }
-    pub(crate) fn set_indices(&'b mut self) -> Result<&mut Self, SimdevalError> {
+    pub(crate) fn set_indices(&'b mut self) -> Result<&mut Self, Error> {
         struct NodeInfo<'b, T, const LANES: usize>
         where
             T: Function<T, LANES>,
@@ -158,50 +181,56 @@ where
         loop {
             let c = iter.next();
             let n = iter.peek_mut();
-            if let Some(next) = n {
-                let curr = c.unwrap();
-                let ord = curr.weight.cmp(&next.weight);
+            match (c, n) {
+                (Some(curr), Some(next)) => {
+                    let ord = curr.weight.cmp(&next.weight);
 
-                match ord {
-                    Ordering::Equal => {
-                        if let Node::Instruction { lhs, .. } = next.node {
-                            *lhs = curr.index;
-                        } else {
+                    match ord {
+                        Ordering::Equal => {
+                            if let Node::Instruction { lhs, .. } = next.node {
+                                *lhs = curr.index;
+                            } else {
+                            }
+                            if lowest_weight.weight >= next.weight {
+                                lowest_weight.weight = next.weight;
+                                lowest_weight.index = next.index;
+                            }
                         }
-                        if lowest_weight.weight >= next.weight {
-                            lowest_weight.weight = next.weight;
-                            lowest_weight.index = next.index;
+                        Ordering::Greater => {
+                            if let Node::Instruction { lhs, .. } = next.node {
+                                *lhs = curr.index;
+                            } else {
+                            }
+                            if lowest_weight.weight >= next.weight {
+                                lowest_weight.weight = next.weight;
+                                lowest_weight.index = next.index;
+                            }
                         }
-                    }
-                    Ordering::Greater => {
-                        if let Node::Instruction { lhs, .. } = next.node {
-                            *lhs = curr.index;
-                        } else {
-                        }
-                        if lowest_weight.weight >= next.weight {
-                            lowest_weight.weight = next.weight;
-                            lowest_weight.index = next.index;
-                        }
-                    }
-                    Ordering::Less => {
-                        if let Node::Instruction { rhs, .. } = curr.node {
-                            *rhs = next.index;
-                        } else {
-                        }
-                        if lowest_weight.weight >= curr.weight {
-                            lowest_weight.weight = curr.weight;
-                            lowest_weight.index = curr.index;
+                        Ordering::Less => {
+                            if let Node::Instruction { rhs, .. } = curr.node {
+                                *rhs = next.index;
+                            } else {
+                            }
+                            if lowest_weight.weight >= curr.weight {
+                                lowest_weight.weight = curr.weight;
+                                lowest_weight.index = curr.index;
+                            }
                         }
                     }
                 }
-            } else {
-                break;
+                (Some(curr), None) => {
+                    if lowest_weight.weight >= curr.weight {
+                        lowest_weight.weight = curr.weight;
+                        lowest_weight.index = curr.index
+                    }
+                }
+                _ => break,
             }
         }
         self.top_node = Some(lowest_weight.index);
         Ok(self)
     }
-    pub(crate) fn set_function_args(&mut self) -> Result<(), SimdevalError> {
+    pub(crate) fn set_function_args(&mut self) -> Result<(), Error> {
         let mut index = 0;
         while index < self.elements.len() {
             let element = &self.elements[index];
@@ -286,14 +315,14 @@ where
         }
     }
 }
-impl<'a, T: Function<T, LANES>, const LANES: usize> Expression<'a, T, LANES>
+impl<'a, T: Function<T, LANES>, const LANES: usize> Expression<T, LANES>
 where
     T: Function<T, LANES> + Clone + Debug,
     [(); T::MAX_ARGS]:,
     LaneCount<LANES>: SupportedLaneCount,
 {
     /// creates a new `Expression` from a string
-    pub fn new(expression: &'a str) -> Self {
+    pub fn new(expression: String) -> Self {
         Self {
             elements: Vec::with_capacity(expression.len()),
             variables: Variables::with_capacity(expression.len() / 2),
@@ -311,32 +340,36 @@ where
         self.top_node = None
     }
     /// set a new expression
-    pub fn set_expression(&mut self, expression: &'a str) {
+    pub fn set_expression(&mut self, expression: String) {
         self.clear();
         self.expression = expression;
     }
     /// compiles the expression into a usable form
     #[inline]
-    pub fn compile(&mut self) -> Result<(), SimdevalError> {
+    pub fn compile(&mut self) -> Result<(), Error> {
         if self.top_node.is_none() {
-            self.to_tokens()?
-                .to_nodes::<4>()?
-                .set_indices()?
-                .set_function_args()
+            if self.expression.is_empty() {
+                Err(Error::EmptyExpression)
+            } else {
+                self.to_tokens()?
+                    .to_nodes::<4>()?
+                    .set_indices()?
+                    .set_function_args()
+            }
         } else {
-            Err(SimdevalError::AlreadyCompiled)
+            Err(Error::AlreadyCompiled)
         }
     }
 
-    pub fn optimize(&mut self) -> Result<(), SimdevalError> {
+    pub fn optimize(&mut self) -> Result<(), Error> {
         if let Some(top_node) = self.top_node {
             self.optimize_recursive(top_node)?;
             Ok(())
         } else {
-            Err(SimdevalError::NotCompiled)
+            Err(Error::NotCompiled)
         }
     }
-    fn optimize_recursive(&mut self, index: usize) -> Result<Option<Value<LANES>>, SimdevalError> {
+    fn optimize_recursive(&mut self, index: usize) -> Result<Option<Value<LANES>>, Error> {
         if let ParseElement::Node(node) = &self.elements[index] {
             match node {
                 Node::Instruction { operator, lhs, rhs } => {
@@ -385,11 +418,7 @@ where
         self.elements.push(ParseElement::Token(token));
     }
 
-    pub fn set_variable(
-        &mut self,
-        identifier: &'a str,
-        value: Value<LANES>,
-    ) -> Result<(), SimdevalError> {
+    pub fn set_variable(&mut self, identifier: &'a str, value: Value<LANES>) -> Result<(), Error> {
         self.variables.set(identifier, value)
     }
 
@@ -397,10 +426,10 @@ where
         &mut self,
         index: usize,
         value: Value<LANES>,
-    ) -> Result<(), SimdevalError> {
+    ) -> Result<(), Error> {
         self.variables.set_by_index(index, value)
     }
-    fn new_token(&mut self, chr: u8, start: usize) -> Result<(), SimdevalError> {
+    fn new_token(&mut self, chr: u8, start: usize) -> Result<(), Error> {
         let token_kind = match chr {
             b'0'..=b'9' => TokenKind::Literal(Literal::Int),
 
@@ -426,7 +455,7 @@ where
 
             b'.' => TokenKind::Literal(Literal::Float),
 
-            _ => return Err(SimdevalError::UnkownCharacter(chr as char)),
+            _ => return Err(Error::UnkownCharacter(chr as char)),
         };
         let token = Token::new(token_kind, start);
         self.elements.push(ParseElement::Token(token));
@@ -440,7 +469,7 @@ where
             index,
         )))
     }
-    fn push(&mut self, chr: u8, index: usize) -> Result<(), SimdevalError> {
+    fn push(&mut self, chr: u8, index: usize) -> Result<(), Error> {
         if let Some(ParseElement::Token(token)) = self.elements.last_mut() {
             match chr {
                 b' ' => (),
@@ -448,7 +477,7 @@ where
                     TokenKind::Identifier(_) => {
                         token.set_kind(TokenKind::Special(Special::Namespace));
                     }
-                    _ => return Err(SimdevalError::UnexpectedToken),
+                    _ => return Err(Error::UnexpectedToken),
                 },
                 b'0'..=b'9' => match token.kind() {
                     TokenKind::Identifier(_) | TokenKind::Literal(_) => token.inc_end(),
@@ -496,7 +525,7 @@ where
                     _ => unreachable!(),
                 },
                 b',' => self.new_token_from_kind(TokenKind::Special(Special::Comma), index),
-                _ => return Err(SimdevalError::UnexpectedToken),
+                _ => return Err(Error::UnexpectedToken),
             }
         } else {
             if chr == b'-' {
@@ -509,21 +538,21 @@ where
     }
 }
 
-impl<'a, T: Function<T, LANES>, const LANES: usize> Expression<'a, T, LANES>
+impl<'a, T: Function<T, LANES>, const LANES: usize> Expression<T, LANES>
 where
     T: Function<T, LANES> + Clone + Debug,
     [(); T::MAX_ARGS]:,
     LaneCount<LANES>: SupportedLaneCount,
 {
     #[inline]
-    pub fn eval(&self) -> Result<Value<LANES>, SimdevalError> {
+    pub fn eval(&self) -> Result<Value<LANES>, Error> {
         if let Some(top_node) = self.top_node {
             self.eval_recursive(top_node)
         } else {
-            Err(SimdevalError::NotCompiled)
+            Err(Error::NotCompiled)
         }
     }
-    fn eval_recursive(&self, index: usize) -> Result<Value<LANES>, SimdevalError> {
+    fn eval_recursive(&self, index: usize) -> Result<Value<LANES>, Error> {
         if let ParseElement::Node(n) = &self.elements[index] {
             Ok(match n {
                 Node::Instruction { operator, lhs, rhs } => {
@@ -540,10 +569,26 @@ where
                 }
             })
         } else {
-            Err(SimdevalError::InvalidIndex)
+            Err(Error::InvalidIndex)
         }
     }
     fn get_operands(&self, index: usize) -> Option<(usize, usize)> {
         self.elements[index].get_operands_indices()
+    }
+}
+
+impl<'a, T, const LANES: usize> Default for Expression<T, LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+    T: Function<T, LANES>,
+    [(); T::MAX_ARGS]:,
+{
+    fn default() -> Self {
+        Self {
+            elements: Default::default(),
+            variables: Default::default(),
+            expression: Default::default(),
+            top_node: Default::default(),
+        }
     }
 }

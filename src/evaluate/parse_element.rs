@@ -1,4 +1,4 @@
-use crate::{error::SimdevalError, stack::Stack};
+use crate::{error::Error, stack::Stack};
 
 use super::{
     enums::{Identifier, Literal, TokenKind},
@@ -32,7 +32,7 @@ where
             None
         }
     }
-    pub(crate) fn to_node(self, namespaces: &mut Iter<&str>, string: &str) -> Result<Self, SimdevalError> {
+    pub(crate) fn to_node(self, namespaces: &mut Iter<&str>, string: &str) -> Result<Self, Error> {
         if let Self::Token(token) = self {
             Ok(match token.kind() {
                 TokenKind::Literal(Literal::Float) => {
@@ -62,7 +62,7 @@ where
                 _ => unreachable!(),
             })
         } else {
-            Err(SimdevalError::InvalidToken)
+            Err(Error::InvalidToken)
         }
     }
 }

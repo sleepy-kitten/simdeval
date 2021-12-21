@@ -1,6 +1,6 @@
 use std::{
     ops::{Add, Div, Mul, Rem, Sub},
-    simd::{self, i64x8, f64x8, LaneCount, SupportedLaneCount},
+    simd::{self, f64x8, i64x8, LaneCount, SupportedLaneCount},
 };
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Single {
@@ -9,26 +9,36 @@ pub enum Single {
     Bool(bool),
 }
 
+impl std::fmt::Display for Single {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(v) => v.fmt(f),
+            Self::Float(v) => v.fmt(f),
+            Self::Bool(v) => v.fmt(f),
+        }
+    }
+}
+
 impl Single {
     pub fn to_float(&mut self) {
         *self = Single::Float(match self {
             Single::Int(v) => *v as f64,
             Single::Float(v) => *v,
-            Single::Bool(v) => *v as u8 as f64
+            Single::Bool(v) => *v as u8 as f64,
         })
     }
     pub fn to_int(&mut self) {
         *self = Single::Int(match self {
             Single::Int(v) => *v,
             Single::Float(v) => *v as i64,
-            Single::Bool(v) => *v as i64
+            Single::Bool(v) => *v as i64,
         })
     }
     pub fn to_bool(&mut self) {
         *self = Single::Bool(match self {
             Single::Int(v) => *v != 0,
             Single::Float(v) => *v != 0.0,
-            Single::Bool(v) => *v
+            Single::Bool(v) => *v,
         })
     }
 
@@ -36,21 +46,21 @@ impl Single {
         match self {
             Single::Int(v) => *v as f64,
             Single::Float(v) => *v,
-            Single::Bool(v) => *v as u8 as f64
+            Single::Bool(v) => *v as u8 as f64,
         }
     }
     pub fn as_int(&self) -> i64 {
         match self {
             Single::Int(v) => *v,
             Single::Float(v) => *v as i64,
-            Single::Bool(v) => *v as i64
+            Single::Bool(v) => *v as i64,
         }
     }
     pub fn as_bool(&self) -> bool {
         match self {
             Single::Int(v) => *v != 0,
             Single::Float(v) => *v != 0.0,
-            Single::Bool(v) => *v
+            Single::Bool(v) => *v,
         }
     }
 }
@@ -182,7 +192,9 @@ impl Single {
                 Single::Bool(r) => Single::Int(l.pow(r as u32)),
             },
             Single::Float(l) => match rhs {
-                Single::Int(r) => Single::Float(l.powi(r.try_into().expect("exponent ouf of range"))),
+                Single::Int(r) => {
+                    Single::Float(l.powi(r.try_into().expect("exponent ouf of range")))
+                }
                 Single::Float(r) => Single::Float(l.powf(r)),
                 Single::Bool(r) => Single::Float(l.powi(r as i32)),
             },

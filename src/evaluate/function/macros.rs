@@ -15,23 +15,23 @@ macro_rules! impl_functions {
             fn from_string(
                 namespaces: &mut std::slice::Iter<&str>,
                 identifier: &str,
-            ) -> Result<$lib<LANES>, $crate::error::SimdevalError> {
+            ) -> Result<$lib<LANES>, $crate::error::Error> {
                 if let Some(&namespace) = dbg!(namespaces.next()) {
                     Ok(match namespace {
                         $(<$import>::NAMESPACE => $lib::$import_namespace(<$import>::from_string(namespaces, identifier)?),)*
                         Self::NAMESPACE => Self::from_string(namespaces, identifier)?,
-                        _ => return Err($crate::error::SimdevalError::InvalidNamespace)
+                        _ => return Err($crate::error::Error::InvalidNamespace)
                     })
                 } else {
                     Ok(match dbg!(identifier) {
                         $(stringify!($func) => $lib::$func_name,)+
-                        _ => return  Err($crate::error::SimdevalError::UnexpectedToken)
+                        _ => return  Err($crate::error::Error::UnexpectedToken)
                     })
                 }
             }
-            fn call(&self, args: &[$crate::evaluate::value::Value<LANES>]) -> Result<$crate::evaluate::value::Value<LANES>, $crate::error::SimdevalError> {
+            fn call(&self, args: &[$crate::evaluate::value::Value<LANES>]) -> Result<$crate::evaluate::value::Value<LANES>, $crate::error::Error> {
                 Ok(match self {
-                    $($lib::$func_name => { if args.len() == $arg_count {$func(args.try_into()?)} else {return Err($crate::error::SimdevalError::InvalidArgs)}},)+
+                    $($lib::$func_name => { if args.len() == $arg_count {$func(args.try_into()?)} else {return Err($crate::error::Error::InvalidArgs)}},)+
                     $($lib::$import_namespace(i) => i.call(args)?,)*
                 })
             }

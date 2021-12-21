@@ -1,4 +1,4 @@
-use std::{fmt::Debug, mem::MaybeUninit, slice::Iter};
+use std::{fmt::Debug, hash::Hash, mem::MaybeUninit, slice::Iter};
 
 // I have no clue if any of this code causes UB I just hope it doesn't
 
@@ -8,18 +8,36 @@ use std::{fmt::Debug, mem::MaybeUninit, slice::Iter};
 ///
 /// will panic if more is pushed to the stack than it can hold,
 /// or if more is popped than pushed
-
+///
 #[derive(Clone)]
 pub(crate) struct Stack<T, const SIZE: usize>
 where
-    T: Copy,
+    T: Copy + PartialEq,
 {
     array: [MaybeUninit<T>; SIZE],
     index: usize,
 }
+
+impl<const SIZE: usize> Hash for Stack<u8, SIZE> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        dbg!(self.slice()).hash(state);
+        dbg!(&state.finish());
+    }
+}
+impl<const SIZE: usize> Eq for Stack<u8, SIZE> {
+}
+
+impl<T, const SIZE: usize> PartialEq for Stack<T, SIZE>
+where
+    T: Copy + PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.slice() == other.slice() && self.index == other.index
+    }
+}
 impl<T, const SIZE: usize> Drop for Stack<T, SIZE>
 where
-    T: Copy,
+    T: Copy + PartialEq,
 {
     // drop implementation due to the requirements of `MaybeUninit`
     fn drop(&mut self) {
@@ -32,7 +50,7 @@ where
 }
 impl<T, const SIZE: usize> Stack<T, SIZE>
 where
-    T: Copy,
+    T: Copy + PartialEq,
 {
     /// constructs a new `Stack` with size N
     pub fn new() -> Self {
@@ -92,7 +110,7 @@ where
 
 impl<T, const N: usize> Debug for Stack<T, N>
 where
-    T: Copy + Debug,
+    T: Copy + Hash + PartialEq + Eq + Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Stack")
@@ -102,12 +120,15 @@ where
     }
 }
 
-impl<T, const SIZE: usize> From<&[T]> for Stack<T, SIZE> where T: Copy {
+impl<T, const SIZE: usize> From<&[T]> for Stack<T, SIZE>
+where
+    T: Copy + Hash + PartialEq + Eq,
+{
     fn from(slice: &[T]) -> Self {
         if slice.len() > SIZE {
             panic!("slice bigger than stack");
         }
-        let stack = Self {
+        let mut stack = Self {
             array: [MaybeUninit::uninit(); SIZE],
             index: 0,
         };

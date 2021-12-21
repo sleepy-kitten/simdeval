@@ -1,7 +1,7 @@
 use std::{num::{ParseFloatError, ParseIntError}, array::TryFromSliceError, str::ParseBoolError};
 
 #[derive(Debug)]
-pub enum SimdevalError {
+pub enum Error {
     UnkownCharacter(char),
     UnexpectedToken,
     NoIdentifierMatch,
@@ -12,25 +12,26 @@ pub enum SimdevalError {
     NotCompiled,
     AlreadyCompiled,
     InvalidIndex,
+    EmptyExpression,
 }
 
-impl From<ParseFloatError> for SimdevalError {
+impl From<ParseFloatError> for Error {
     fn from(_: ParseFloatError) -> Self {
         Self::InvalidToken
     }
 }
-impl From<ParseIntError> for SimdevalError {
+impl From<ParseIntError> for Error {
     fn from(_: ParseIntError) -> Self {
         Self::InvalidToken
     }
 }
-impl From<ParseBoolError> for SimdevalError {
+impl From<ParseBoolError> for Error {
     fn from(_: ParseBoolError) -> Self {
         Self::InvalidToken
     }
 }
 
-impl From<TryFromSliceError> for SimdevalError {
+impl From<TryFromSliceError> for Error {
     fn from(_: TryFromSliceError) -> Self {
         Self::InvalidArgs
     }

@@ -1,6 +1,6 @@
 use ::std::{slice::Iter, simd::{LaneCount, SupportedLaneCount}};
 
-use crate::error::SimdevalError;
+use crate::error::Error;
 
 use super::value::Value;
 
@@ -16,8 +16,8 @@ where
 {
     const NAMESPACE: &'static str;
     const MAX_ARGS: usize;
-    fn from_string(namespaces: &mut Iter<&str>, identifier: &str) -> Result<T, SimdevalError>;
-    fn call(&self, args: &[Value<LANES>]) -> Result<Value<LANES>, SimdevalError>;
+    fn from_string(namespaces: &mut Iter<&str>, identifier: &str) -> Result<T, Error>;
+    fn call(&self, args: &[Value<LANES>]) -> Result<Value<LANES>, Error>;
     fn is_const(&self) -> bool {
         true
     }

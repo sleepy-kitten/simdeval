@@ -37,7 +37,7 @@ impl<'a> Token {
             end: 0,
         }
     }
-    pub(crate) fn slice(&self, string: &'a str) -> &'a str {
+    pub(crate) fn slice<'b>(&'a self, string: &'b str) -> &'b str {
         &string[self.start..self.end]
     }
 }

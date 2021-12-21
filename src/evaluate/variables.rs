@@ -1,21 +1,22 @@
 use std::{
+    collections::{hash_map::Iter, HashMap},
     ops::{Index, IndexMut},
     simd::{LaneCount, SupportedLaneCount},
 };
 
-use crate::error::SimdevalError;
+use crate::{error::Error, small_string::SmallString};
 
 use super::value::{single::Single, Value};
 
 #[derive(Debug)]
-pub(crate) struct Variables<'a, const LANES: usize>
+pub(crate) struct Variables<const LANES: usize>
 where
     LaneCount<LANES>: SupportedLaneCount,
 {
-    identifiers: Vec<&'a str>,
+    identifiers: HashMap<SmallString<16>, usize>,
     values: Vec<Value<LANES>>,
 }
-impl<'a, const LANES: usize> Variables<'a, LANES>
+impl<'a, const LANES: usize> Variables<LANES>
 where
     LaneCount<LANES>: SupportedLaneCount,
 {
@@ -25,23 +26,24 @@ where
     }
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
-            identifiers: Vec::with_capacity(capacity),
+            identifiers: HashMap::with_capacity(capacity),
             values: Vec::with_capacity(capacity),
         }
     }
     pub(crate) fn push(&mut self, identifier: &'a str) {
-        self.identifiers.push(identifier);
+        self.identifiers
+            .insert(identifier.into(), self.values.len());
         self.values.push(Value::Single(Single::Int(0)));
     }
     pub(crate) fn set(
         &mut self,
         identifier: &'a str,
         value: Value<LANES>,
-    ) -> Result<(), SimdevalError> {
-        let index = self
+    ) -> Result<(), Error> {
+        let index = *self
             .identifiers
-            .binary_search(&identifier)
-            .map_err(|_| SimdevalError::InvalidVariable)?;
+            .get(identifier)
+            .ok_or(Error::InvalidVariable)?;
         self.values[index] = value;
         Ok(())
     }
@@ -49,28 +51,27 @@ where
         &mut self,
         index: usize,
         value: Value<LANES>,
-    ) -> Result<(), SimdevalError> {
+    ) -> Result<(), Error> {
         *self
             .values
             .get_mut(index)
-            .ok_or(SimdevalError::InvalidVariable)? = value;
+            .ok_or(Error::InvalidVariable)? = value;
         Ok(())
     }
     pub(crate) fn find_or_set(&mut self, identifier: &'a str) -> usize {
-        if let Ok(i) = self.identifiers.binary_search(&identifier) {
-            i
+        if let Some(index) = self.identifiers.get(identifier) {
+            *index
         } else {
-            self.identifiers.push(identifier);
-            self.values.push(Value::Single(Single::Int(0)));
-            self.identifiers.len() - 1
+            self.push(identifier);
+            self.values.len() - 1
         }
     }
-    pub(crate) fn identifiers(&self) -> &[&str] {
-        &self.identifiers
+    pub(crate) fn identifiers_iter(&self) -> Iter<SmallString<16>, usize> {
+        self.identifiers.iter()
     }
 }
 
-impl<'a, const LANES: usize> Index<usize> for Variables<'a, LANES>
+impl<const LANES: usize> Index<usize> for Variables<LANES>
 where
     LaneCount<LANES>: SupportedLaneCount,
 {
@@ -81,10 +82,23 @@ where
     }
 }
 
-impl<'a, const LANES: usize> IndexMut<usize> for Variables<'a, LANES> where
-    LaneCount<LANES>: SupportedLaneCount
+impl<const LANES: usize> IndexMut<usize> for Variables<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
 {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.values[index]
+    }
+}
+
+impl<'a, const LANES: usize> Default for Variables<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    fn default() -> Self {
+        Self {
+            identifiers: Default::default(),
+            values: Default::default(),
+        }
     }
 }

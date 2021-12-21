@@ -7,8 +7,6 @@ use std::{
     time::Instant,
 };
 
-use fasteval::Compiler;
-
 use crate::{
     biggest,
     evaluate::{
@@ -20,14 +18,21 @@ use crate::{
         value::{simd::Simd, single::Single, Value},
     },
     impl_functions, impl_functions_test,
-    stack::Stack,
+    stack::Stack, small_string::SmallString,
 };
 
 #[test]
 fn test_parse_fast() {
-    let expression = "print(2+6^2*4)";
-    let mut expression = Expression::<Std<8>, 8>::new(expression);
-    expression.compile().unwrap();
+    let expression = "1+1".to_string();
+    let mut expression = Expression::<Std<1>, 1>::new(expression);
+    //expression.compile().unwrap();
+    expression.to_tokens().unwrap();
+    println!("tokens: {:#?}", expression);
+    expression.to_nodes::<4>().unwrap();
+    println!("nodes: {:#?}", expression);
+    expression.set_indices().unwrap();
+    println!("indices: {:#?}", expression);
+    
     expression.optimize().unwrap();
 
     //let temp = expression;
@@ -36,12 +41,12 @@ fn test_parse_fast() {
 }
 #[bench]
 fn bench_parse_fast(b: &mut test::Bencher) {
-    let expression = "a+43*3-a+b^3";
-    let mut test = Expression::<Std<8>, 8>::new(expression);
+    let expression = "a+43*3-a+b^3".to_string();
+    let mut test = Expression::<Std<8>, 8>::new(expression.to_owned());
     b.iter(|| {
         test::black_box({
             test.compile().unwrap();
-            test.set_expression(expression)
+            test.set_expression(expression.to_owned())
             //.to_nodes()
             //.unwrap()
             //.set_indices()
@@ -52,50 +57,55 @@ fn bench_parse_fast(b: &mut test::Bencher) {
 
 #[bench]
 fn bench_compile_to_tokens(b: &mut test::Bencher) {
-    let expression = "a+43*3-a+b^3";
-    let mut test = Expression::<Std<8>, 8>::new(expression);
+    let expression = "a+43*3-a+b^3".to_string();
+    let mut test = Expression::<Std<8>, 8>::new(expression.to_owned());
     test.compile().unwrap();
     b.iter(|| {
         test.to_tokens().unwrap();
-        test.set_expression(expression);
+        test.set_expression(expression.to_owned());
     })
 }
 
 #[bench]
 fn bench_compile_to_nodes(b: &mut test::Bencher) {
-    let expression = "a+43*3-a+b^3";
-    let mut test = Expression::<Std<8>, 8>::new(expression);
+    let expression = "a+43*3-a+b^3".to_string();
+    let mut test = Expression::<Std<8>, 8>::new(expression.to_owned());
     test.compile().unwrap();
     b.iter(|| {
         test.to_tokens().unwrap();
         test.to_nodes::<4>().unwrap();
-        test.set_expression(expression);
+        test.set_expression(expression.to_owned());
     })
 }
 
 #[bench]
 fn bench_compile_set_indices(b: &mut test::Bencher) {
-    let expression = "a+43*3-a+b^3";
-    let mut test = Expression::<Std<8>, 8>::new(expression);
+    let expression = "a+43*3-a+b^3".to_string();
+    let mut test = Expression::<Std<8>, 8>::new(expression.to_owned());
     test.compile().unwrap();
     b.iter(|| {
         test.to_tokens().unwrap();
         test.to_nodes::<4>().unwrap();
         test.set_indices().unwrap();
-        test.set_expression(expression);
+        test.set_expression(expression.to_owned());
     })
 }
 
 #[test]
 fn test_fast_sizes() {
     println!("element:   {}", size_of::<ParseElement<Std<8>, 8>>());
+    println!("element:   {}", size_of::<ParseElement<Std<1>, 1>>());
     println!("node:      {}", size_of::<Node<Std<8>, 8>>());
+    println!("node:      {}", size_of::<Node<Std<1>, 1>>());
     println!("token:     {}", size_of::<Token>());
+    println!("smallstr:  {}", size_of::<SmallString<16>>());
+    println!("u8:        {}", size_of::<f64>());
+    
 }
 
 #[test]
 fn test_macro() {
-    let mut expression = Expression::<Std<8>, 8>::new("std:sqrt(3+1+5+a)");
+    let mut expression = Expression::<Std<8>, 8>::new("std:sqrt(3+1+5+a)".to_string());
     expression.compile().unwrap();
     expression
         .set_variable("a", Value::Single(Single::Int(666)))
@@ -106,7 +116,7 @@ fn test_macro() {
 }
 #[test]
 fn test_eval() {
-    let mut expression = Expression::<Std<8>, 8>::new("sqrt(a)");
+    let mut expression = Expression::<Std<1>, 1>::new("sqrt(a)".to_string());
     expression.compile().unwrap();
     expression.optimize().unwrap();
     println!("expression: {:#?}", expression);
@@ -131,21 +141,21 @@ fn test_eval() {
 }
 #[bench]
 fn bench_eval(b: &mut test::Bencher) {
-    let mut expression = Expression::<Std<8>, 8>::new("2+6^a*4");
+    let mut expression = Expression::<Std<8>, 8>::new("2+6^a*4".to_string());
     expression.compile().unwrap();
     expression.optimize().unwrap();
     b.iter(|| test::black_box(expression.eval()))
 }
-
+/*
 #[bench]
 fn bench_eval_fasteval(b: &mut test::Bencher) {
     use fasteval::Evaler;
     let parser = fasteval::Parser::new();
     let mut slab = fasteval::Slab::new();
     let expression = parser
-        .parse("2+6^a*4", &mut slab.ps)
-        .unwrap()
-        .from(&slab.ps);
+    .parse("2+6^a*4", &mut slab.ps)
+    .unwrap()
+    .from(&slab.ps);
     let compiled = expression.compile(&slab.ps, &mut slab.cs);
     println!("{:#?}", compiled);
     b.iter(|| test::black_box(compiled.eval(&slab, &mut fasteval::evalns::EmptyNamespace)))
@@ -156,24 +166,25 @@ fn bench_parse_fasteval(b: &mut test::Bencher) {
     let parser = fasteval::Parser::new();
     let mut slab = fasteval::Slab::new();
     let expression = parser
-        .parse("2+6^2*4", &mut slab.ps)
-        .unwrap()
-        .from(&slab.ps);
+    .parse("2+6^2*4", &mut slab.ps)
+    .unwrap()
+    .from(&slab.ps);
     let compiled = expression.compile(&slab.ps, &mut slab.cs);
     b.iter(|| {
         test::black_box({
             parser
-                .parse("2+6^2*4", &mut slab.ps)
-                .unwrap()
-                .from(&slab.ps)
-                .compile(&slab.ps, &mut slab.cs);
+            .parse("2+6^2*4", &mut slab.ps)
+            .unwrap()
+            .from(&slab.ps)
+            .compile(&slab.ps, &mut slab.cs);
         })
     })
 }
+*/
 
 #[test]
 fn test_handle_thing() {
-    let mut test = Expression::<Std<8>, 8>::new("a+b+2");
+    let mut test = Expression::<Std<8>, 8>::new("a+b+2".to_string());
     let _ = test.compile();
     let elements = test.elements();
 }
@@ -182,8 +193,8 @@ fn test_handle_thing() {
 fn test_full_speed() {
     let start = Instant::now();
     for i in 0..=1000000 {
-        let mut test = Expression::<Std<8>, 8>::new("a+b+2");
-        test.set_expression("3+1+5+3");
+        let mut test = Expression::<Std<8>, 8>::new("a+b+2".to_string());
+        test.set_expression("3+1+5+3".to_string());
         test.compile().unwrap();
         test.optimize().unwrap();
         test.eval().unwrap();
@@ -194,7 +205,7 @@ fn test_full_speed() {
 
 #[test]
 fn test_eval_simd_stack() {
-    let expression = "1.0+a+43.0*3.0-b^3.0";
+    let expression = "1.0+a+43.0*3.0-b^3.0".to_string();
     let mut expression = Expression::<Std<8>, 8>::new(expression);
     expression.compile().unwrap();
     expression.optimize().unwrap();
@@ -219,9 +230,9 @@ fn test_eval_simd_stack() {
     println!("{}ms", end.as_millis())
 }
 #[test]
-fn test_eval_simd() {
+fn test_eval_simd_mul() {
     let expression = "1.0+a+43.0*3.0-b^3.0";
-    let mut expression = Expression::<Std<8>, 8>::new(expression);
+    let mut expression = Expression::<Std<8>, 8>::new(expression.to_string());
     expression.compile().unwrap();
     expression.optimize().unwrap();
     expression
@@ -253,8 +264,8 @@ fn test_eval_simd() {
 
 #[test]
 fn test_eval_normal() {
-    let expression = "1.0+a+43.0*3.0-b^3.0";
-    let mut expression = Expression::<Std<8>, 8>::new(expression);
+    let expression = "1.0+a+43.0*3.0-b^3.0".to_string();
+    let mut expression = Expression::<Std<1>, 1>::new(expression);
     expression.compile().unwrap();
     expression.optimize().unwrap();
     expression

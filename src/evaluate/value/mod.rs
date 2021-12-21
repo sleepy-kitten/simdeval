@@ -8,7 +8,7 @@ use self::{simd::Simd, single::Single};
 pub mod simd;
 pub mod single;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<const LANES: usize>
 where
     LaneCount<LANES>: SupportedLaneCount,
@@ -17,6 +17,16 @@ where
     Single(Single),
 }
 
+impl<const LANES: usize> std::fmt::Display for Value<LANES> where
+    LaneCount<LANES>: SupportedLaneCount
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Simd(v) => v.fmt(f),
+            Self::Single(v) => v.fmt(f)
+        }
+    }
+}
 impl<const LANES: usize> Value<LANES>
 where
     LaneCount<LANES>: SupportedLaneCount,

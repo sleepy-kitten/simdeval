@@ -1,7 +1,7 @@
 use std::simd::{LaneCount, SupportedLaneCount};
 
 use crate::{
-    error::SimdevalError,
+    error::Error,
     evaluate::{
         node::Node,
         value::{single::Single, Value},
@@ -15,14 +15,12 @@ fn sqrt<const LANES: usize>(values: [Value<LANES>; 1]) -> Value<LANES>
 where
     LaneCount<LANES>: SupportedLaneCount,
 {   
-    /*
     Value::Single(Single::Float(match values {
         [Value::Single(Single::Int(v))] => (v as f64).sqrt(),
         [Value::Single(Single::Float(v))] => v.sqrt(),
         [Value::Single(Single::Bool(v))] => v as i64 as f64,
+        _ => todo!()
     }))
-    */
-    todo!()
 }
 fn print<const LANES: usize>(values: [Value<LANES>; 1]) -> Value<LANES>
 where
@@ -35,10 +33,13 @@ fn log<const LANES: usize>(values: [Value<LANES>; 2]) -> Value<LANES>
 where
     LaneCount<LANES>: SupportedLaneCount,
 {
-    return todo!()
-    //let num = values[0].as_float();
-    //let base = values[1].as_float();
-    //Value::Single(Single::Float(num.log(base)))
+    if let [Value::Single(lhs), Value::Single(rhs)] = values {
+        let num = lhs.as_float();
+        let base = rhs.as_float();
+        Value::Single(Single::Float(num.log(base)))
+    } else {
+        todo!()
+    }
 }
 fn abs<const LANES: usize>(values: [Value<LANES>; 1]) -> Value<LANES>
 where

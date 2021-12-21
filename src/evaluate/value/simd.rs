@@ -3,7 +3,7 @@ use std::{
     simd::{self, f64x8, i64x8, LaneCount, SupportedLaneCount},
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Simd<const LANES: usize>
 where
     LaneCount<LANES>: SupportedLaneCount,
@@ -11,6 +11,17 @@ where
     //Int(simd::Simd<i64, LANES>),
     Float(simd::Simd<f64, LANES>),
     //Bool(simd::Simd<u64, LANES>),
+}
+
+impl<const LANES: usize> std::fmt::Display for Simd<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::Float(v) => write!(f, "{:#?}", v)
+        }
+    }
 }
 impl<const LANES: usize> Simd<LANES>
 where
