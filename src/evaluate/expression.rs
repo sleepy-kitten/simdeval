@@ -314,6 +314,9 @@ where
             }
         }
     }
+    pub fn string(&self) -> &str {
+        &self.expression
+    }
 }
 impl<'a, T: Function<T, LANES>, const LANES: usize> Expression<T, LANES>
 where
@@ -575,6 +578,7 @@ where
     fn get_operands(&self, index: usize) -> Option<(usize, usize)> {
         self.elements[index].get_operands_indices()
     }
+
 }
 
 impl<'a, T, const LANES: usize> Default for Expression<T, LANES>
