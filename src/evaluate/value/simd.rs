@@ -27,7 +27,7 @@ impl<const LANES: usize> Simd<LANES>
 where
     LaneCount<LANES>: SupportedLaneCount,
 {
-    fn as_float(&self) -> simd::Simd<f64, LANES> {
+    pub fn as_float(&self) -> simd::Simd<f64, LANES> {
         match self {
             Simd::Float(v) => *v,
         }

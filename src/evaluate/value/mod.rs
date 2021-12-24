@@ -17,13 +17,14 @@ where
     Single(Single),
 }
 
-impl<const LANES: usize> std::fmt::Display for Value<LANES> where
-    LaneCount<LANES>: SupportedLaneCount
+impl<const LANES: usize> std::fmt::Display for Value<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Simd(v) => v.fmt(f),
-            Self::Single(v) => v.fmt(f)
+            Self::Single(v) => v.fmt(f),
         }
     }
 }
@@ -36,6 +37,12 @@ where
             let value = single.as_float();
             let array = [value; LANES];
             *self = Value::Simd(Simd::Float(array.into()));
+        }
+    }
+    pub fn as_single_float(self) -> f64 {
+        match self {
+            Self::Simd(v) => v.as_float()[0],
+            Self::Single(v) => v.as_float(),
         }
     }
 }
