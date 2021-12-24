@@ -317,6 +317,9 @@ where
     pub fn string(&self) -> &str {
         &self.expression
     }
+    pub fn variables_iter(&self) -> impl Iterator<Item = &str> {
+        self.variables.identifiers()
+    }
 }
 impl<'a, T: Function<T, LANES>, const LANES: usize> Expression<T, LANES>
 where

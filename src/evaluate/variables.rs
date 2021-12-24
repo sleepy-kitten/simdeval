@@ -66,8 +66,8 @@ where
             self.values.len() - 1
         }
     }
-    pub(crate) fn identifiers_iter(&self) -> Iter<SmallString<16>, usize> {
-        self.identifiers.iter()
+    pub(crate) fn identifiers(&self) -> impl Iterator<Item = &str> {
+        self.identifiers.keys().map(|s| s.as_str())
     }
 }
 
