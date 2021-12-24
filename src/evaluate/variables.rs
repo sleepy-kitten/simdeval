@@ -66,8 +66,8 @@ where
             self.values.len() - 1
         }
     }
-    pub(crate) fn identifiers(&self) -> impl Iterator<Item = &str> {
-        self.identifiers.keys().map(|s| s.as_str())
+    pub(crate) fn variables(&self) -> impl Iterator<Item = (&str, usize)> {
+        self.identifiers.iter().map(|(s, i)| (s.as_str(), *i))
     }
 }
 
