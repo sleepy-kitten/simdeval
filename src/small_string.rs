@@ -1,11 +1,20 @@
-use std::{str::from_utf8, borrow::Borrow, hash::Hash};
+use std::{borrow::Borrow, hash::Hash, str::from_utf8};
 
 use crate::stack::Stack;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq)]
 pub(crate) enum SmallString<const SIZE: usize> {
     Small(Stack<u8, SIZE>),
     String(String),
+}
+impl<const SIZE: usize> PartialEq for SmallString<SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Small(l0), Self::Small(r0)) => l0 == r0,
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
 }
 impl<const SIZE: usize> Hash for SmallString<SIZE> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -32,8 +41,8 @@ impl<const SIZE: usize> SmallString<SIZE> {
 impl<const SIZE: usize> Borrow<str> for SmallString<SIZE> {
     fn borrow(&self) -> &str {
         match self {
-            Self::String(string) => &string,
-            Self::Small(small) => from_utf8(small.slice()).unwrap()
+            Self::String(string) => string,
+            Self::Small(small) => from_utf8(small.slice()).unwrap(),
         }
     }
 }

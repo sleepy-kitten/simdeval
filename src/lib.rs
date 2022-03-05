@@ -1,7 +1,6 @@
 #![feature(test)]
 
 #![feature(maybe_uninit_slice)]
-#![feature(maybe_uninit_extra)]
 #![feature(maybe_uninit_array_assume_init)]
 
 #![feature(more_qualified_paths)]
